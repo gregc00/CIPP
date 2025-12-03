@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Button, Stack, Box } from "@mui/material";
+import { Button, Stack } from "@mui/material";
 import { RocketLaunch } from "@mui/icons-material";
 import { useForm, useWatch } from "react-hook-form";
 import { CippOffCanvas } from "./CippOffCanvas";
@@ -100,22 +100,25 @@ export const CippCADeployDrawer = ({
         onClose={handleCloseDrawer}
         size="lg"
         footer={
-          <Stack direction="row" justifyContent="flex-start" spacing={2}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleSubmit}
-              disabled={deployPolicy.isLoading}
-            >
-              {deployPolicy.isLoading
-                ? "Deploying..."
-                : deployPolicy.isSuccess
-                ? "Redeploy Policy"
-                : "Deploy Policy"}
-            </Button>
-            <Button variant="outlined" onClick={handleCloseDrawer}>
-              Close
-            </Button>
+          <Stack spacing={2}>
+            <CippApiResults apiObject={deployPolicy} />
+            <Stack direction="row" justifyContent="flex-start" spacing={2}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSubmit}
+                disabled={deployPolicy.isLoading}
+              >
+                {deployPolicy.isLoading
+                  ? "Deploying..."
+                  : deployPolicy.isSuccess
+                  ? "Redeploy Policy"
+                  : "Deploy Policy"}
+              </Button>
+              <Button variant="outlined" onClick={handleCloseDrawer}>
+                Close
+              </Button>
+            </Stack>
           </Stack>
         }
       >
@@ -125,6 +128,7 @@ export const CippCADeployDrawer = ({
             name="tenantFilter"
             required={true}
             disableClearable={false}
+            preselectedEnabled={true}
             allTenants={true}
             type="multiple"
           />
@@ -195,8 +199,6 @@ export const CippCADeployDrawer = ({
             label="Disable Security Defaults if enabled when creating policy"
             formControl={formControl}
           />
-
-          <CippApiResults apiObject={deployPolicy} />
         </Stack>
       </CippOffCanvas>
     </>

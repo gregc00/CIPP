@@ -16,7 +16,7 @@ import { ArrowLeftIcon } from "@mui/x-date-pickers";
 import { useDialog } from "../../../hooks/use-dialog";
 import { ApiGetCall } from "../../../api/ApiCall";
 import _ from "lodash";
-import { createDriftManagementActions } from "./manage-drift/driftManagementActions";
+import { createDriftManagementActions } from "../manage/driftManagementActions";
 import { ActionsMenu } from "/src/components/actions-menu";
 import { useSettings } from "/src/hooks/use-settings";
 
@@ -310,28 +310,9 @@ const Page = () => {
   };
 
   return (
-    <Box sx={{ flexGrow: 1, py: 2 }}>
+    <Box sx={{ flexGrow: 1 }}>
       <Container maxWidth={"xl"}>
         <Stack spacing={2}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Button
-              color="inherit"
-              onClick={() =>
-                hasUnsavedChanges
-                  ? window.confirm(
-                      "You have unsaved changes. Are you sure you want to leave this page?"
-                    ) && router.back()
-                  : router.back()
-              }
-              startIcon={
-                <SvgIcon fontSize="small">
-                  <ArrowLeftIcon />
-                </SvgIcon>
-              }
-            >
-              Back to Templates
-            </Button>
-          </Stack>
           <Stack
             direction="row"
             justifyContent="space-between"

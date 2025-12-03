@@ -1,8 +1,6 @@
-import { Button } from "@mui/material";
 import { CippTablePage } from "/src/components/CippComponents/CippTablePage.jsx";
 import { Layout as DashboardLayout } from "/src/layouts/index.js";
 import { TabbedLayout } from "/src/layouts/TabbedLayout";
-import Link from "next/link";
 import { Delete, Add } from "@mui/icons-material";
 import { EyeIcon } from "@heroicons/react/24/outline";
 import tabOptions from "./tabOptions.json";
@@ -13,14 +11,14 @@ const Page = () => {
   const actions = [
     {
       label: "View Tenant Report",
-      link: "/tenant/standards/manage-drift/compare?tenantFilter=[tenantFilter]&templateId=[standardId]",
+      link: "/tenant/manage/applied-standards/?tenantFilter=[tenantFilter]&templateId=[standardId]",
       icon: <EyeIcon />,
       color: "info",
       target: "_self",
     },
     {
       label: "Manage Drift",
-      link: "/tenant/standards/manage-drift?templateId=[standardId]&tenantFilter=[tenantFilter]",
+      link: "/tenant/manage/drift?templateId=[standardId]&tenantFilter=[tenantFilter]",
       icon: <EyeIcon />,
       color: "info",
       target: "_self",
