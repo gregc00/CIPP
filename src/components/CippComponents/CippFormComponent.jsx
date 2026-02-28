@@ -56,6 +56,7 @@ export const CippFormComponent = (props) => {
     helperText,
     disableVariables = false,
     includeSystemVariables = false,
+    row,
     ...other
   } = props;
   const { errors } = useFormState({ control: formControl.control });
@@ -299,7 +300,7 @@ export const CippFormComponent = (props) => {
                     checked={Boolean(field.value)}
                     {...other}
                     {...formControl.register(convertedName, { ...validators })}
-                  />
+                  />,
                 )
               }
             />
@@ -354,6 +355,7 @@ export const CippFormComponent = (props) => {
               render={({ field }) => {
                 return (
                   <RadioGroup
+                    row={row}
                     value={field.value || ""}
                     onChange={(e) => field.onChange(e.target.value)}
                     {...other}
@@ -408,16 +410,32 @@ export const CippFormComponent = (props) => {
         </>
       );
 
-    case "autoComplete":
+    case "autoComplete": {
+      // Resolve options if it's a function
+      const resolvedOptions =
+        typeof other.options === "function" ? other.options(row) : other.options;
+
+      // Wrap validate function to pass row as third parameter
+      const resolvedValidators = validators
+        ? {
+            ...validators,
+            validate:
+              typeof validators.validate === "function"
+                ? (value, formValues) => validators.validate(value, formValues, row)
+                : validators.validate,
+          }
+        : validators;
+
       return (
         <div>
           <Controller
             name={convertedName}
             control={formControl.control}
-            rules={validators}
+            rules={resolvedValidators}
             render={({ field }) => (
               <MemoizedCippAutoComplete
                 {...other}
+                options={resolvedOptions}
                 isFetching={other.isFetching}
                 variant="filled"
                 defaultValue={field.value}
@@ -439,6 +457,7 @@ export const CippFormComponent = (props) => {
           )}
         </div>
       );
+    }
 
     case "richText": {
       const editorInstanceRef = React.useRef(null);
@@ -517,7 +536,7 @@ export const CippFormComponent = (props) => {
               acc[csvHeader] = internalKey;
               return acc;
             },
-            {}
+            {},
           );
 
           return data.map((row) => {
