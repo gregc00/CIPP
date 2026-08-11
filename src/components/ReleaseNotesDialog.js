@@ -31,7 +31,8 @@ import { GitHub } from '@mui/icons-material'
 import { CippAutoComplete } from './CippComponents/CippAutocomplete'
 
 const RELEASE_COOKIE_KEY = 'cipp_release_notice'
-const RELEASE_OWNER = 'KelvinTegelaar'
+const RELEASE_PERMANENT_HIDE_KEY = 'cipp_release_notice_permanently_hidden'
+const RELEASE_OWNER = 'CyberDrain'
 const RELEASE_REPO = 'CIPP'
 
 const secureFlag = () => {
@@ -70,16 +71,30 @@ const setCookie = (name, value, days = 365) => {
   )}; expires=${expires}; path=/; SameSite=Lax;${secureFlag()}`
 }
 
+const deleteCookie = (name) => {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax;${secureFlag()}`
+}
+
+// Hotfix and maintenance builds publish their own GitHub release (v10.8.1, v10.8.2, ...), so the
+// running build's exact tag is both what we show and what we remember as dismissed. Collapsing
+// patch releases back to vX.Y.0 here left the dismissal cookie - which stores the tag that was
+// actually released - permanently unmatchable, so the dialog reopened on every page load.
+// baseTag survives only as a display fallback for builds whose exact tag has no release
+// (nightly, local, or a version bumped ahead of the tag being published).
 const buildReleaseMetadata = (version) => {
-  const [major = '0', minor = '0', patch = '0'] = String(version).split('.')
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(version ?? ''))
+  const [major, minor, patch] = match ? match.slice(1) : ['0', '0', '0']
   const currentTag = `v${major}.${minor}.${patch}`
-  const baseTag = `v${major}.${minor}.0`
-  const tagToUse = patch === '0' ? currentTag : baseTag
 
   return {
     currentTag,
-    releaseTag: tagToUse,
-    releaseUrl: `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${tagToUse}`,
+    baseTag: `v${major}.${minor}.0`,
+    releaseTag: currentTag,
+    releaseUrl: `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${currentTag}`,
   }
 }
 
@@ -142,8 +157,15 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
     }
 
     const storedValue = getCookie(RELEASE_COOKIE_KEY)
+    if (storedValue === 'permanently_dismissed') {
+      window.localStorage.setItem(RELEASE_PERMANENT_HIDE_KEY, 'true')
+      deleteCookie(RELEASE_COOKIE_KEY)
+      return
+    }
 
-    if (storedValue !== releaseMeta.releaseTag) {
+    const permanentlyHidden = window.localStorage.getItem(RELEASE_PERMANENT_HIDE_KEY) === 'true'
+
+    if (!permanentlyHidden && storedValue !== releaseMeta.releaseTag) {
       setIsEligible(true)
     }
   }, [releaseMeta.releaseTag])
@@ -152,11 +174,7 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
 
   const releaseListQuery = ApiGetCall({
     url: '/api/ListGitHubReleaseNotes',
-    queryKey: 'list-github-release-options',
-    data: {
-      Owner: RELEASE_OWNER,
-      Repository: RELEASE_REPO,
-    },
+    queryKey: `list-github-release-options`,
     waiting: shouldFetchReleaseList,
     staleTime: 300000,
   })
@@ -182,12 +200,13 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
     if (!hasSelected) {
       const fallbackRelease =
         releaseCatalog.find((release) => release.releaseTag === releaseMeta.releaseTag) ||
+        releaseCatalog.find((release) => release.releaseTag === releaseMeta.baseTag) ||
         releaseCatalog[0]
       if (fallbackRelease) {
         setSelectedReleaseTag(fallbackRelease.releaseTag)
       }
     }
-  }, [releaseCatalog, selectedReleaseTag, releaseMeta.releaseTag])
+  }, [releaseCatalog, selectedReleaseTag, releaseMeta])
 
   const releaseOptions = useMemo(() => {
     const mapped = releaseCatalog.map((release) => {
@@ -255,14 +274,26 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
     return (
       releaseCatalog.find((release) => release.releaseTag === selectedReleaseTag) ||
       releaseCatalog.find((release) => release.releaseTag === releaseMeta.releaseTag) ||
+      releaseCatalog.find((release) => release.releaseTag === releaseMeta.baseTag) ||
       null
     )
-  }, [releaseCatalog, selectedReleaseTag, releaseMeta.releaseTag])
+  }, [releaseCatalog, selectedReleaseTag, releaseMeta])
 
   const handleDismissUntilNextRelease = () => {
-    const newestRelease = releaseCatalog[0]
-    const tagToStore = newestRelease?.releaseTag ?? newestRelease?.tagName ?? releaseMeta.releaseTag
-    setCookie(RELEASE_COOKIE_KEY, tagToStore)
+    // Store the same tag the eligibility check reads back - the tag of the build being run, not
+    // the newest tag on GitHub. Those differ for anyone not on the very latest release, and a
+    // cookie that can never match means "don't show until next release" never suppresses anything.
+    window.localStorage.removeItem(RELEASE_PERMANENT_HIDE_KEY)
+    setCookie(RELEASE_COOKIE_KEY, releaseMeta.releaseTag)
+    setOpen(false)
+    setIsExpanded(false)
+    setManualOpenRequested(false)
+    setIsEligible(false)
+  }
+
+  const handleDismissPermanently = () => {
+    window.localStorage.setItem(RELEASE_PERMANENT_HIDE_KEY, 'true')
+    deleteCookie(RELEASE_COOKIE_KEY)
     setOpen(false)
     setIsExpanded(false)
     setManualOpenRequested(false)
@@ -270,6 +301,7 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
   }
 
   const handleRemindLater = () => {
+    window.localStorage.removeItem(RELEASE_PERMANENT_HIDE_KEY)
     setOpen(false)
     setIsExpanded(false)
     setManualOpenRequested(false)
@@ -457,7 +489,21 @@ export const ReleaseNotesDialog = forwardRef((_props, ref) => {
         >
           View release notes on GitHub
         </Button>
-        <Stack direction="row" spacing={1}>
+        <Stack
+          alignItems="center"
+          direction="row"
+          flexWrap="wrap"
+          gap={1}
+          justifyContent="flex-end"
+        >
+          <Button
+            onClick={handleDismissPermanently}
+            size="small"
+            sx={{ color: 'text.secondary', minWidth: 'auto', px: 1 }}
+            variant="text"
+          >
+            Don't show again
+          </Button>
           <Button onClick={handleRemindLater} variant="outlined">
             Remind me next time
           </Button>

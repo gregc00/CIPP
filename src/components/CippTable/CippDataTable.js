@@ -15,7 +15,10 @@ import { Scrollbar } from '../scrollbar'
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ApiGetCallWithPagination } from '../../api/ApiCall'
 import { utilTableMode } from './util-tablemode'
-import { utilColumnsFromAPI, resolveSimpleColumnVariables } from './util-columnsFromAPI'
+import {
+  utilColumnsFromAPI,
+  resolveSimpleColumnVariables,
+} from './util-columnsFromAPI'
 import { CIPPTableToptoolbar } from './CIPPTableToptoolbar'
 import { Info, More, MoreHoriz } from '@mui/icons-material'
 import { CippOffCanvas } from '../CippComponents/CippOffCanvas'
@@ -24,6 +27,7 @@ import { CippApiDialog } from '../CippComponents/CippApiDialog'
 import { getCippError } from '../../utils/get-cipp-error'
 import { Box } from '@mui/system'
 import { useSettings } from '../../hooks/use-settings'
+import { parseCippDate } from '../../utils/parse-cipp-date'
 import { isEqual } from 'lodash' // Import lodash for deep comparison
 import { useLicenseBackfill } from '../../hooks/use-license-backfill'
 
@@ -80,14 +84,20 @@ const compareNullable = (aVal, bVal) => {
 // These never change between renders, so extracting them avoids creating new
 // object references on every render cycle.
 
+// Stable ref so an undefined `data` prop doesn't create a fresh [] each render
+// and loop the static-data sync effect.
+const EMPTY_ARRAY = []
+
 const SORTING_FNS = {
   dateTimeNullsLast: (a, b, id) => {
     const aRaw = getRowValueByColumnId(a, id)
     const bRaw = getRowValueByColumnId(b, id)
-    const aDate = aRaw ? new Date(aRaw) : null
-    const bDate = bRaw ? new Date(bRaw) : null
-    const aTime = aDate && !Number.isNaN(aDate.getTime()) ? aDate.getTime() : null
-    const bTime = bDate && !Number.isNaN(bDate.getTime()) ? bDate.getTime() : null
+    const aDate = aRaw ? parseCippDate(aRaw) : null
+    const bDate = bRaw ? parseCippDate(bRaw) : null
+    const aTime =
+      aDate && !Number.isNaN(aDate.getTime()) ? aDate.getTime() : null
+    const bTime =
+      bDate && !Number.isNaN(bDate.getTime()) ? bDate.getTime() : null
 
     return compareNullable(aTime, bTime)
   },
@@ -156,7 +166,10 @@ const FILTER_FNS = {
     try {
       const regex = new RegExp(value, 'i')
       const rowValue = row.getValue(columnId)
-      if (typeof rowValue === 'string' && !rowValue.includes('[object Object]')) {
+      if (
+        typeof rowValue === 'string' &&
+        !rowValue.includes('[object Object]')
+      ) {
         return regex.test(rowValue)
       }
       return false
@@ -261,7 +274,10 @@ const computeSchemaKey = (data) => {
 }
 
 // ── Module-level render helpers for filter mode menus ──────────────────────
-function renderGlobalFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilterMode }) {
+function renderGlobalFilterModeMenuItemsFn({
+  internalFilterOptions,
+  onSelectFilterMode,
+}) {
   const customFilterOptions = [
     {
       option: 'regex',
@@ -271,7 +287,11 @@ function renderGlobalFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilt
   ]
 
   customFilterOptions.forEach((filterOption) => {
-    if (!internalFilterOptions.some((option) => option.option === filterOption.option)) {
+    if (
+      !internalFilterOptions.some(
+        (option) => option.option === filterOption.option
+      )
+    ) {
       internalFilterOptions.push(filterOption)
     }
   })
@@ -286,13 +306,18 @@ function renderGlobalFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilt
         gap: '0.5rem',
       }}
     >
-      <span style={{ width: '20px', textAlign: 'center' }}>{filterOption.symbol}</span>
+      <span style={{ width: '20px', textAlign: 'center' }}>
+        {filterOption.symbol}
+      </span>
       <ListItemText>{filterOption.label}</ListItemText>
     </MenuItem>
   ))
 }
 
-function renderColumnFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilterMode }) {
+function renderColumnFilterModeMenuItemsFn({
+  internalFilterOptions,
+  onSelectFilterMode,
+}) {
   const customFilterOptions = [
     {
       option: 'notContains',
@@ -306,7 +331,10 @@ function renderColumnFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilt
     },
   ]
 
-  const combinedFilterOptions = [...internalFilterOptions, ...customFilterOptions]
+  const combinedFilterOptions = [
+    ...internalFilterOptions,
+    ...customFilterOptions,
+  ]
 
   return combinedFilterOptions.map((filterOption) => (
     <MenuItem
@@ -318,7 +346,9 @@ function renderColumnFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilt
         gap: '0.5rem',
       }}
     >
-      <span style={{ width: '20px', textAlign: 'center' }}>{filterOption.symbol}</span>
+      <span style={{ width: '20px', textAlign: 'center' }}>
+        {filterOption.symbol}
+      </span>
       <ListItemText>{filterOption.label}</ListItemText>
     </MenuItem>
   ))
@@ -327,7 +357,7 @@ function renderColumnFilterModeMenuItemsFn({ internalFilterOptions, onSelectFilt
 export const CippDataTable = (props) => {
   const {
     queryKey,
-    data = [],
+    data = EMPTY_ARRAY,
     columns = [],
     api = {},
     isFetching = false,
@@ -341,6 +371,7 @@ export const CippDataTable = (props) => {
     },
     exportEnabled = true,
     simpleColumns = [],
+    dataFilter,
     actions,
     title = 'Report',
     simple = false,
@@ -378,8 +409,11 @@ export const CippDataTable = (props) => {
   const filtersInitializedRef = useRef(false)
   const previousFiltersRef = useRef(null)
 
-  const [columnVisibility, setColumnVisibility] = useState(initialColumnVisibility)
-  const [configuredSimpleColumns, setConfiguredSimpleColumns] = useState(simpleColumns)
+  const [columnVisibility, setColumnVisibility] = useState(
+    initialColumnVisibility
+  )
+  const [configuredSimpleColumns, setConfiguredSimpleColumns] =
+    useState(simpleColumns)
   const [usedData, setUsedData] = useState(data)
   const [usedColumns, setUsedColumns] = useState([])
   const [offcanvasVisible, setOffcanvasVisible] = useState(false)
@@ -388,7 +422,11 @@ export const CippDataTable = (props) => {
   const [filteredRows, setFilteredRows] = useState([])
   const [customComponentData, setCustomComponentData] = useState({})
   const [customComponentVisible, setCustomComponentVisible] = useState(false)
-  const [actionData, setActionData] = useState({ data: {}, action: {}, ready: false })
+  const [actionData, setActionData] = useState({
+    data: {},
+    action: {},
+    ready: false,
+  })
   const [graphFilterData, setGraphFilterData] = useState({})
   const [sorting, setSorting] = useState([])
   const [columnFilters, setColumnFilters] = useState([])
@@ -432,7 +470,9 @@ export const CippDataTable = (props) => {
           if (filter.filterType === 'equal') {
             return {
               ...filter,
-              value: Array.isArray(filter.value) ? filter.value : [filter.value],
+              value: Array.isArray(filter.value)
+                ? filter.value
+                : [filter.value],
             }
           }
           return filter
@@ -460,7 +500,8 @@ export const CippDataTable = (props) => {
 
   useEffect(() => {
     if (getRequestData.isSuccess && !getRequestData.isFetching) {
-      const lastPage = getRequestData.data?.pages[getRequestData.data.pages.length - 1]
+      const lastPage =
+        getRequestData.data?.pages[getRequestData.data.pages.length - 1]
       const nextLinkExists = lastPage?.Metadata?.nextLink
       if (nextLinkExists) {
         getRequestData.fetchNextPage()
@@ -476,7 +517,9 @@ export const CippDataTable = (props) => {
         const nestedData = getNestedValue(page, api.dataKey)
         return nestedData !== undefined ? nestedData : []
       })
-      setUsedData(combinedResults)
+      setUsedData(
+        dataFilter ? combinedResults.filter(dataFilter) : combinedResults
+      )
     }
   }, [
     getRequestData.isSuccess,
@@ -535,7 +578,10 @@ export const CippDataTable = (props) => {
       })
     } else if (configuredSimpleColumns.length > 0) {
       // Resolve any variables in the simple columns before checking visibility
-      const resolvedSimpleColumns = resolveSimpleColumnVariables(configuredSimpleColumns, usedData)
+      const resolvedSimpleColumns = resolveSimpleColumnVariables(
+        configuredSimpleColumns,
+        usedData
+      )
 
       // Add Tenant to resolved columns if in AllTenants mode and not already included
       let finalResolvedColumns = [...resolvedSimpleColumns]
@@ -550,7 +596,9 @@ export const CippDataTable = (props) => {
         }
       })
     } else {
-      const providedColumnKeys = new Set(columns.map((col) => col.id || col.header))
+      const providedColumnKeys = new Set(
+        columns.map((col) => col.id || col.header)
+      )
       finalColumns = [
         ...columns,
         ...enhancedApiColumns.filter((col) => !providedColumnKeys.has(col.id)),
@@ -576,9 +624,18 @@ export const CippDataTable = (props) => {
     }
     setUsedColumns(finalColumns)
     setColumnVisibility(newVisibility)
-  }, [columns.length, usedData, queryKey, settings?.currentTenant, filterTypeMap])
+  }, [
+    columns.length,
+    usedData,
+    queryKey,
+    settings?.currentTenant,
+    filterTypeMap,
+  ])
 
   const createDialog = useDialog()
+  const hasActions = !!actions
+  const hasOffCanvas = !!offCanvas
+  const hasOnChange = !!onChange
 
   // Compute modeInfo via useMemo so it stays stable but updates when relevant inputs change.
   const modeInfo = useMemo(
@@ -593,17 +650,30 @@ export const CippDataTable = (props) => {
         maxHeightOffset,
         settings
       ),
-    [simple, !!actions, !!offCanvas, !!onChange, maxHeightOffset, settings?.tablePageSize?.value]
+    [
+      simple,
+      hasActions,
+      hasOffCanvas,
+      hasOnChange,
+      maxHeightOffset,
+      settings?.tablePageSize?.value,
+    ]
   )
 
-  // Include updateTrigger in data memo to force re-render when license backfill completes
-  const memoizedData = useMemo(() => usedData, [usedData, updateTrigger])
+  // Include updateTrigger in data memo to force re-render when license backfill completes.
+  // Also refresh data identity when derived columns change so TanStack re-runs filtering
+  // for searches entered before columns are available.
+  const memoizedData = useMemo(
+    () => (Array.isArray(usedData) ? usedData.slice() : usedData),
+    [usedData, updateTrigger, usedColumns]
+  )
 
   // Sanitize columnVisibility to remove any undefined/invalid keys before passing to MRT
   const sanitizedColumnVisibility = useMemo(() => {
     const result = {}
     for (const key of Object.keys(columnVisibility)) {
-      if (key !== 'undefined' && key !== undefined) result[key] = columnVisibility[key]
+      if (key !== 'undefined' && key !== undefined)
+        result[key] = columnVisibility[key]
     }
     return result
   }, [columnVisibility])
@@ -630,7 +700,9 @@ export const CippDataTable = (props) => {
           bottom: '0 !important',
           left: {
             xs: '0 !important',
-            lg: settings?.sidebarCollapse ? '73px !important' : '270px !important',
+            lg: settings?.sidebarCollapse
+              ? '73px !important'
+              : '270px !important',
           },
           right: '0 !important',
           zIndex: '1300 !important',
@@ -651,11 +723,21 @@ export const CippDataTable = (props) => {
   const muiTableBodyRowProps = useMemo(() => {
     if (offCanvasOnRowClick && offCanvas) {
       return ({ row }) => ({
-        onClick: () => {
+        onClick: (event) => {
+          if (
+            event.target?.closest?.(
+              'button, a, input, textarea, select, [role="button"], [role="menuitem"], [data-no-row-click="true"]'
+            )
+          ) {
+            return
+          }
+
           setOffCanvasData(row.original)
           const filteredRowsArray = table?.getFilteredRowModel?.()?.rows
           if (filteredRowsArray) {
-            const indexInFiltered = filteredRowsArray.findIndex((r) => r.original === row.original)
+            const indexInFiltered = filteredRowsArray.findIndex(
+              (r) => r.original === row.original
+            )
             setOffCanvasRowIndex(indexInFiltered >= 0 ? indexInFiltered : 0)
           }
           setOffcanvasVisible(true)
@@ -707,48 +789,63 @@ export const CippDataTable = (props) => {
   const renderRowActionMenuItems = useMemo(() => {
     if (actions) {
       return ({ closeMenu, row }) => [
-        actions.map((action, index) => (
-          <MenuItem
-            sx={{ color: action.color }}
-            key={`actions-list-row-${index}`}
-            onClick={() => {
-              if (settings.currentTenant === 'AllTenants' && row.original?.Tenant) {
-                settings.handleUpdate({
-                  currentTenant: row.original.Tenant,
+        actions
+          .filter(
+            // hideCondition removes an action from this row's menu entirely (vs.
+            // condition, which renders it disabled).
+            (action) =>
+              typeof action.hideCondition !== 'function' ||
+              !action.hideCondition(row.original)
+          )
+          .map((action, index) => (
+            <MenuItem
+              sx={{ color: action.color }}
+              key={`actions-list-row-${index}`}
+              onClick={() => {
+                const scopeToRowTenant = () => {
+                  if (
+                    settings.currentTenant === 'AllTenants' &&
+                    row.original?.Tenant
+                  ) {
+                    settings.handleUpdate({
+                      currentTenant: row.original.Tenant,
+                    })
+                  }
+                }
+
+                if (action.noConfirm && action.customFunction) {
+                  scopeToRowTenant()
+                  action.customFunction(row.original, action, {})
+                  closeMenu()
+                  return
+                }
+
+                // Handle custom component differently
+                if (typeof action.customComponent === 'function') {
+                  scopeToRowTenant()
+                  setCustomComponentData({ data: row.original, action: action })
+                  setCustomComponentVisible(true)
+                  closeMenu()
+                  return
+                }
+
+                // Standard dialog flow
+                setActionData({
+                  data: row.original,
+                  action: action,
+                  ready: true,
                 })
-              }
-
-              if (action.noConfirm && action.customFunction) {
-                action.customFunction(row.original, action, {})
+                createDialog.handleOpen()
                 closeMenu()
-                return
-              }
-
-              // Handle custom component differently
-              if (typeof action.customComponent === 'function') {
-                setCustomComponentData({ data: row.original, action: action })
-                setCustomComponentVisible(true)
-                closeMenu()
-                return
-              }
-
-              // Standard dialog flow
-              setActionData({
-                data: row.original,
-                action: action,
-                ready: true,
-              })
-              createDialog.handleOpen()
-              closeMenu()
-            }}
-            disabled={handleActionDisabled(row.original, action)}
-          >
-            <SvgIcon fontSize="small" sx={{ minWidth: '30px' }}>
-              {action.icon}
-            </SvgIcon>
-            <ListItemText>{action.label}</ListItemText>
-          </MenuItem>
-        )),
+              }}
+              disabled={handleActionDisabled(row.original, action)}
+            >
+              <SvgIcon fontSize="small" sx={{ minWidth: '30px' }}>
+                {action.icon}
+              </SvgIcon>
+              <ListItemText>{action.label}</ListItemText>
+            </MenuItem>
+          )),
         offCanvas && (
           <MenuItem
             key={`actions-list-row-more`}
@@ -780,7 +877,9 @@ export const CippDataTable = (props) => {
             closeMenu()
             setOffCanvasData(row.original)
             const filteredRowsArray = table.getFilteredRowModel().rows
-            const indexInFiltered = filteredRowsArray.findIndex((r) => r.original === row.original)
+            const indexInFiltered = filteredRowsArray.findIndex(
+              (r) => r.original === row.original
+            )
             setOffCanvasRowIndex(indexInFiltered >= 0 ? indexInFiltered : 0)
             setOffcanvasVisible(true)
           }}
@@ -794,7 +893,13 @@ export const CippDataTable = (props) => {
     }
 
     return undefined
-  }, [actions, offCanvas, settings.currentTenant, handleActionDisabled, createDialog])
+  }, [
+    actions,
+    offCanvas,
+    settings.currentTenant,
+    handleActionDisabled,
+    createDialog,
+  ])
 
   // Stable renderTopToolbar — memoized so MaterialReactTable doesn't re-create the toolbar
   // component on every parent render.
@@ -927,9 +1032,9 @@ export const CippDataTable = (props) => {
             <ResourceUnavailable message={incorrectDataMessage} />
           ) : (
             <>
-              {(getRequestData.isSuccess || getRequestData.data?.pages.length >= 0 || data) && (
-                <MaterialReactTable table={table} />
-              )}
+              {(getRequestData.isSuccess ||
+                getRequestData.data?.pages.length >= 0 ||
+                data) && <MaterialReactTable table={table} />}
             </>
           )}
           {getRequestData.isError && !getRequestData.isFetchNextPageError && (
@@ -960,15 +1065,18 @@ export const CippDataTable = (props) => {
                 <>
                   {(getRequestData.isSuccess ||
                     getRequestData.data?.pages.length >= 0 ||
-                    (data && !getRequestData.isError)) && <MaterialReactTable table={table} />}
+                    (data && !getRequestData.isError)) && (
+                    <MaterialReactTable table={table} />
+                  )}
                 </>
               )}
-              {getRequestData.isError && !getRequestData.isFetchNextPageError && (
-                <ResourceError
-                  onReload={() => getRequestData.refetch()}
-                  message={`Error Loading data:  ${getCippError(getRequestData.error)}`}
-                />
-              )}
+              {getRequestData.isError &&
+                !getRequestData.isFetchNextPageError && (
+                  <ResourceError
+                    onReload={() => getRequestData.refetch()}
+                    message={`Error Loading data:  ${getCippError(getRequestData.error)}`}
+                  />
+                )}
             </Scrollbar>
           </CardContent>
         </Card>
@@ -982,7 +1090,9 @@ export const CippDataTable = (props) => {
         actions={actions}
         title={offCanvasData?.Name || offCanvas?.title || 'Extended Info'}
         children={
-          offCanvas?.children ? (row) => offCanvas.children(row, offCanvasRowIndex) : undefined
+          offCanvas?.children
+            ? (row) => offCanvas.children(row, offCanvasRowIndex)
+            : undefined
         }
         customComponent={offCanvas?.customComponent}
         onNavigateUp={() => {
@@ -1000,7 +1110,9 @@ export const CippDataTable = (props) => {
           }
         }}
         canNavigateUp={offCanvasRowIndex > 0}
-        canNavigateDown={filteredRows && offCanvasRowIndex < filteredRows.length - 1}
+        canNavigateDown={
+          filteredRows && offCanvasRowIndex < filteredRows.length - 1
+        }
         {...offCanvas}
       />
       {/* Render custom component */}
@@ -1017,7 +1129,8 @@ export const CippDataTable = (props) => {
       {useMemo(() => {
         if (
           !actionData.ready ||
-          (actionData.action && typeof actionData.action.customComponent === 'function')
+          (actionData.action &&
+            typeof actionData.action.customComponent === 'function')
         )
           return null
         return (
@@ -1031,7 +1144,14 @@ export const CippDataTable = (props) => {
             {...actionData.action}
           />
         )
-      }, [actionData.ready, createDialog, actionData.action, actionData.data, queryKey, title])}
+      }, [
+        actionData.ready,
+        createDialog,
+        actionData.action,
+        actionData.data,
+        queryKey,
+        title,
+      ])}
     </>
   )
 }

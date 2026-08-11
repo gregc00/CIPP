@@ -1,4 +1,10 @@
-import { BuildingOfficeIcon, HomeIcon, UsersIcon, WrenchIcon } from '@heroicons/react/24/outline'
+import {
+  BuildingOfficeIcon,
+  HomeIcon,
+  SparklesIcon,
+  UsersIcon,
+  WrenchIcon,
+} from '@heroicons/react/24/outline'
 import {
   CloudOutlined,
   HomeRepairService,
@@ -118,7 +124,7 @@ export const nativeMenuItems = [
             permissions: ['Identity.User.*'],
           },
           {
-            title: 'AAD Connect Report',
+            title: 'Microsoft Entra Connect Report',
             path: '/identity/reports/azure-ad-connect-report',
             permissions: ['Identity.User.*'],
           },
@@ -139,7 +145,12 @@ export const nativeMenuItems = [
         <BuildingOfficeIcon />
       </SvgIcon>
     ),
-    permissions: ['Tenant.*', 'Identity.AuditLog.*', 'CIPP.Backup.*', 'Scheduler.Billing.*'],
+    permissions: [
+      'Tenant.*',
+      'Identity.AuditLog.*',
+      'CIPP.Backup.*',
+      'Scheduler.Billing.*',
+    ],
     items: [
       {
         title: 'Administration',
@@ -214,6 +225,14 @@ export const nativeMenuItems = [
             permissions: ['Tenant.Standards.*'],
             scope: 'global',
           },
+          // Baselines mockup - hidden from the nav for now; reach it directly
+          // at /tenant/baselines
+          // {
+          //   title: 'Baselines (Preview)',
+          //   path: '/tenant/baselines',
+          //   permissions: ['Tenant.Standards.*'],
+          //   scope: 'global',
+          // },
           {
             title: 'Best Practice Analyser',
             path: '/tenant/standards/bpa-report',
@@ -257,7 +276,11 @@ export const nativeMenuItems = [
       },
       {
         title: 'Reports',
-        permissions: ['Tenant.Administration.*', 'Scheduler.Billing.*', 'Tenant.Application.*'],
+        permissions: [
+          'Tenant.Administration.*',
+          'Scheduler.Billing.*',
+          'Tenant.Application.*',
+        ],
         items: [
           {
             title: 'Licence Report',
@@ -277,6 +300,11 @@ export const nativeMenuItems = [
           {
             title: 'Graph / Office Reports',
             path: '/tenant/reports/graph-office-reports',
+            permissions: ['Tenant.Reports.*'],
+          },
+          {
+            title: 'Custom Test Report',
+            path: '/tenant/reports/custom-test-report',
             permissions: ['Tenant.Reports.*'],
           },
         ],
@@ -301,11 +329,10 @@ export const nativeMenuItems = [
       'Security.Alert.*',
       'Tenant.DeviceCompliance.*',
       'Security.SafeLinksPolicy.*',
-      // TEMP: Purview Compliance menu hidden for dev build
-      // 'Security.DlpCompliancePolicy.*',
-      // 'Security.RetentionCompliancePolicy.*',
-      // 'Security.SensitivityLabel.*',
-      // 'Security.SensitiveInfoType.*',
+      'Security.DlpCompliancePolicy.*',
+      'Security.RetentionCompliancePolicy.*',
+      'Security.SensitivityLabel.*',
+      'Security.SensitiveInfoType.*',
     ],
     items: [
       {
@@ -353,6 +380,11 @@ export const nativeMenuItems = [
             path: '/security/defender/list-defender-tvm',
             permissions: ['Security.Alert.*'],
           },
+          {
+            title: 'CVE Management',
+            path: '/security/defender/defender-cve-exceptions',
+            permissions: ['Security.Alert.*'],
+          },
         ],
       },
       {
@@ -367,6 +399,11 @@ export const nativeMenuItems = [
           {
             title: 'MDE Onboarding',
             path: '/security/reports/mde-onboarding',
+            permissions: ['Security.Defender.*'],
+          },
+          {
+            title: 'Vulnerability Report',
+            path: '/security/reports/cve-report',
             permissions: ['Security.Defender.*'],
           },
         ],
@@ -388,62 +425,115 @@ export const nativeMenuItems = [
           },
         ],
       },
-      // TEMP: Purview Compliance menu hidden for dev build
-      // {
-      //   title: 'Purview Compliance',
-      //   permissions: [
-      //     'Security.DlpCompliancePolicy.*',
-      //     'Security.RetentionCompliancePolicy.*',
-      //     'Security.SensitivityLabel.*',
-      //     'Security.SensitiveInfoType.*',
-      //   ],
-      //   items: [
-      //     {
-      //       title: 'DLP Policies',
-      //       path: '/security/compliance/dlp',
-      //       permissions: ['Security.DlpCompliancePolicy.*'],
-      //     },
-      //     {
-      //       title: 'DLP Policy Templates',
-      //       path: '/security/compliance/dlp-templates',
-      //       permissions: ['Security.DlpCompliancePolicy.*'],
-      //       scope: 'global',
-      //     },
-      //     {
-      //       title: 'Retention Policies',
-      //       path: '/security/compliance/retention',
-      //       permissions: ['Security.RetentionCompliancePolicy.*'],
-      //     },
-      //     {
-      //       title: 'Retention Policy Templates',
-      //       path: '/security/compliance/retention-templates',
-      //       permissions: ['Security.RetentionCompliancePolicy.*'],
-      //       scope: 'global',
-      //     },
-      //     {
-      //       title: 'Sensitivity Labels',
-      //       path: '/security/compliance/labels',
-      //       permissions: ['Security.SensitivityLabel.*'],
-      //     },
-      //     {
-      //       title: 'Sensitivity Label Templates',
-      //       path: '/security/compliance/labels-templates',
-      //       permissions: ['Security.SensitivityLabel.*'],
-      //       scope: 'global',
-      //     },
-      //     {
-      //       title: 'Sensitive Information Types',
-      //       path: '/security/compliance/sit',
-      //       permissions: ['Security.SensitiveInfoType.*'],
-      //     },
-      //     {
-      //       title: 'Sensitive Info Type Templates',
-      //       path: '/security/compliance/sit-templates',
-      //       permissions: ['Security.SensitiveInfoType.*'],
-      //       scope: 'global',
-      //     },
-      //   ],
-      // },
+      {
+        title: 'Purview Compliance',
+        permissions: [
+          'Security.DlpCompliancePolicy.*',
+          'Security.RetentionCompliancePolicy.*',
+          'Security.SensitivityLabel.*',
+          'Security.SensitiveInfoType.*',
+        ],
+        items: [
+          {
+            title: 'DLP Policies',
+            path: '/security/compliance/dlp',
+            permissions: ['Security.DlpCompliancePolicy.*'],
+          },
+          {
+            title: 'DLP Policy Templates',
+            path: '/security/compliance/dlp-templates',
+            permissions: ['Security.DlpCompliancePolicy.*'],
+            scope: 'global',
+          },
+          {
+            title: 'Retention Policies',
+            path: '/security/compliance/retention',
+            permissions: ['Security.RetentionCompliancePolicy.*'],
+          },
+          {
+            title: 'Retention Policy Templates',
+            path: '/security/compliance/retention-templates',
+            permissions: ['Security.RetentionCompliancePolicy.*'],
+            scope: 'global',
+          },
+          {
+            title: 'Sensitivity Labels',
+            path: '/security/compliance/labels',
+            permissions: ['Security.SensitivityLabel.*'],
+          },
+          {
+            title: 'Sensitivity Label Templates',
+            path: '/security/compliance/labels-templates',
+            permissions: ['Security.SensitivityLabel.*'],
+            scope: 'global',
+          },
+          {
+            title: 'Sensitive Information Types',
+            path: '/security/compliance/sit',
+            permissions: ['Security.SensitiveInfoType.*'],
+          },
+          {
+            title: 'Sensitive Info Type Templates',
+            path: '/security/compliance/sit-templates',
+            permissions: ['Security.SensitiveInfoType.*'],
+            scope: 'global',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Copilot & AI',
+    type: 'header',
+    icon: (
+      <SvgIcon>
+        <SparklesIcon />
+      </SvgIcon>
+    ),
+    permissions: ['Tenant.Standards.*'],
+    items: [
+      {
+        title: 'Shadow AI Discovery',
+        path: '/copilot/shadow-ai',
+        permissions: ['Tenant.Standards.*'],
+      },
+      {
+        title: 'Copilot Settings',
+        path: '/copilot/settings',
+        permissions: ['Tenant.Standards.*'],
+      },
+      {
+        title: 'Agent365',
+        permissions: ['Tenant.Standards.*'],
+        items: [
+          {
+            title: 'Packages',
+            path: '/copilot/agent365/packages',
+            permissions: ['Tenant.Standards.*'],
+          },
+        ],
+      },
+      {
+        title: 'Reports',
+        permissions: ['Tenant.Standards.*'],
+        items: [
+          {
+            title: 'Copilot Adoption',
+            path: '/copilot/reports/copilot-adoption',
+            permissions: ['Tenant.Standards.*'],
+          },
+          {
+            title: 'Copilot Usage Trend',
+            path: '/copilot/reports/copilot-trend',
+            permissions: ['Tenant.Standards.*'],
+          },
+          {
+            title: 'Copilot User Activity',
+            path: '/copilot/reports/copilot-usage',
+            permissions: ['Tenant.Standards.*'],
+          },
+        ],
+      },
     ],
   },
   {
@@ -480,11 +570,12 @@ export const nativeMenuItems = [
             title: 'Application Templates',
             path: '/endpoint/applications/templates',
             permissions: ['Endpoint.Application.*'],
+            scope: 'global',
           },
         ],
       },
       {
-        title: 'Autopilot',
+        title: 'Autopilot & Enrollment',
         permissions: ['Endpoint.Autopilot.*'],
         items: [
           {
@@ -498,8 +589,8 @@ export const nativeMenuItems = [
             permissions: ['Endpoint.Autopilot.*'],
           },
           {
-            title: 'Profiles',
-            path: '/endpoint/autopilot/list-profiles',
+            title: 'Enrollment Profiles',
+            path: '/endpoint/autopilot/enrollment-profiles',
             permissions: ['Endpoint.Autopilot.*'],
           },
           {
@@ -511,11 +602,16 @@ export const nativeMenuItems = [
       },
       {
         title: 'Device Management',
-        permissions: ['Endpoint.MEM.*'],
+        permissions: ['Endpoint.MEM.*', 'Endpoint.Device.*'],
         items: [
           {
             title: 'Devices',
             path: '/endpoint/MEM/devices',
+            permissions: ['Endpoint.Device.*'],
+          },
+          {
+            title: 'BitLocker Key Search',
+            path: '/endpoint/MEM/bitlocker-search',
             permissions: ['Endpoint.Device.*'],
           },
           {
@@ -566,11 +662,20 @@ export const nativeMenuItems = [
             path: '/endpoint/MEM/list-scripts',
             permissions: ['Endpoint.MEM.*'],
           },
+          {
+            title: 'MAA Requests',
+            path: '/endpoint/MEM/approval-requests',
+            permissions: ['Endpoint.MEM.*'],
+          },
         ],
       },
       {
         title: 'Reports',
-        permissions: ['Endpoint.Device.*', 'Endpoint.Autopilot.*', 'Endpoint.MEM.*'],
+        permissions: [
+          'Endpoint.Device.*',
+          'Endpoint.Autopilot.*',
+          'Endpoint.MEM.*',
+        ],
         items: [
           {
             title: 'Analytics Device Score',
@@ -621,6 +726,31 @@ export const nativeMenuItems = [
         title: 'SharePoint',
         path: '/teams-share/sharepoint',
         permissions: ['Sharepoint.Admin.*'],
+      },
+      {
+        title: 'SharePoint Templates',
+        path: '/teams-share/sharepoint-templates',
+        permissions: ['Sharepoint.Admin.*'],
+      },
+      {
+        title: 'Deleted Sites',
+        path: '/teams-share/deleted-sites',
+        permissions: ['Sharepoint.Admin.*'],
+      },
+      {
+        title: 'Sharing Report',
+        path: '/teams-share/sharing-report',
+        permissions: ['Sharepoint.Site.*'],
+      },
+      {
+        title: 'Permissions Report',
+        path: '/teams-share/permissions-report',
+        permissions: ['Sharepoint.Site.*'],
+      },
+      {
+        title: 'External Users',
+        path: '/teams-share/external-users',
+        permissions: ['Sharepoint.Site.*'],
       },
       {
         title: 'Teams',
@@ -677,6 +807,11 @@ export const nativeMenuItems = [
             permissions: ['Exchange.Mailbox.*'],
           },
           {
+            title: 'HVE Accounts',
+            path: '/email/administration/hve-accounts',
+            permissions: ['Exchange.Mailbox.*'],
+          },
+          {
             title: 'Deleted Mailboxes',
             path: '/email/administration/deleted-mailboxes',
             permissions: ['Exchange.Mailbox.*'],
@@ -727,7 +862,7 @@ export const nativeMenuItems = [
       },
       {
         title: 'Transport',
-        permissions: ['Exchange.TransportRule.*'],
+        permissions: ['Exchange.TransportRule.*', 'Exchange.Connector.*'],
         items: [
           {
             title: 'Transport rules',
@@ -755,7 +890,7 @@ export const nativeMenuItems = [
       },
       {
         title: 'Spamfilter',
-        permissions: ['Exchange.SpamFilter.*'],
+        permissions: ['Exchange.SpamFilter.*', 'Exchange.ConnectionFilter.*'],
         items: [
           {
             title: 'Spamfilter',
@@ -788,7 +923,7 @@ export const nativeMenuItems = [
       },
       {
         title: 'Resource Management',
-        permissions: ['Exchange.Equipment.*'],
+        permissions: ['Exchange.Equipment.*', 'Exchange.Room.*'],
         items: [
           {
             title: 'Equipment',
@@ -1005,7 +1140,7 @@ export const nativeMenuItems = [
         scope: 'global',
       },
       {
-        title: 'Community Repositories',
+        title: 'Catalog',
         path: '/tools/community-repos',
         roles: ['editor', 'admin', 'superadmin'],
         permissions: ['CIPP.Core.*'],
@@ -1074,6 +1209,25 @@ export const nativeMenuItems = [
           {
             title: 'Super Admin',
             path: '/cipp/advanced/super-admin/tenant-mode',
+            roles: ['superadmin'],
+            permissions: ['CIPP.SuperAdmin.*'],
+            scope: 'global',
+          },
+          {
+            title: 'Container Management',
+            path: '/cipp/advanced/container-management/status',
+            roles: ['superadmin'],
+            permissions: ['CIPP.SuperAdmin.*'],
+            scope: 'global',
+          },
+          {
+            // Lands on cipp-roles, not cipp-users: cipp-users is gated by the
+            // SuperAdminNG feature flag, and the nav filter drops any item whose
+            // path is in a disabled flag's Pages list — pointing here at cipp-users
+            // would hide the whole Authentication group (including the ungated
+            // SSO and SAM App pages) on non-NG instances.
+            title: 'Authentication',
+            path: '/cipp/advanced/authentication/cipp-roles',
             roles: ['superadmin'],
             permissions: ['CIPP.SuperAdmin.*'],
             scope: 'global',

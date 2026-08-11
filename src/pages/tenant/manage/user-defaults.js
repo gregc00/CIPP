@@ -91,7 +91,8 @@ const Page = () => {
         labelField: 'id',
         valueField: 'id',
         queryKey: `ListGraphRequest-domains-${userSettings.currentTenant}`,
-        dataFilter: (options) => options.filter((option) => option?.addedFields?.isVerified === true), // Only include verified domains
+        dataFilter: (options) =>
+          options.filter((option) => option?.addedFields?.isVerified === true), // Only include verified domains
       },
       multiple: false,
       creatable: false,
@@ -121,9 +122,10 @@ const Page = () => {
       api: {
         url: '/api/ListLicenses',
         labelField: (option) =>
-          `${option.License || option.skuPartNumber} (${option.AvailableUnits || 0} available)`,
+          `${option.License || option.skuPartNumber} (${option.availableUnits || 0} available)`,
         valueField: 'skuId',
-        queryKey: 'ListLicenses',
+        data: { IncludeExcluded: true },
+        queryKey: `ListLicenses-${userSettings.currentTenant}`,
       },
       multiple: true,
       creatable: false,
@@ -136,12 +138,72 @@ const Page = () => {
         url: '/api/ListGroups',
         labelField: 'displayName',
         valueField: 'id',
-        queryKey: 'ListGroups',
+        queryKey: `ListGroups-${userSettings.currentTenant}`,
         addedField: {
           groupType: 'calculatedGroupType',
         },
       },
       multiple: true,
+      creatable: false,
+    },
+    {
+      label: 'Shared Mailboxes',
+      name: 'sharedMailboxes',
+      type: 'autoComplete',
+      api: {
+        url: '/api/ListMailboxes',
+        data: { RecipientTypeDetails: 'SharedMailbox' },
+        labelField: (option) => `${option.displayName} (${option.UPN})`,
+        valueField: 'UPN',
+        queryKey: `SharedMailboxes-${userSettings.currentTenant}`,
+      },
+      helperText:
+        'New users are granted access to these mailboxes 15 minutes after creation. With Full Access, Outlook adds them automatically.',
+      multiple: true,
+      creatable: false,
+    },
+    {
+      label: 'Shared Mailbox Permissions',
+      name: 'sharedMailboxPermission',
+      type: 'autoComplete',
+      options: [
+        { label: 'Full Access', value: 'FullAccess' },
+        { label: 'Send As', value: 'SendAs' },
+        { label: 'Send on Behalf', value: 'SendOnBehalf' },
+      ],
+      helperText: 'Defaults to Full Access. Select several to grant them together.',
+      multiple: true,
+      creatable: false,
+    },
+    {
+      label: 'Shared Calendars',
+      name: 'sharedCalendars',
+      type: 'autoComplete',
+      api: {
+        url: '/api/ListMailboxes',
+        data: { RecipientTypeDetails: 'SharedMailbox' },
+        labelField: (option) => `${option.displayName} (${option.UPN})`,
+        valueField: 'UPN',
+        queryKey: `SharedMailboxes-${userSettings.currentTenant}`,
+      },
+      helperText:
+        'New users are sent a sharing invitation for these calendars 15 minutes after creation.',
+      multiple: true,
+      creatable: false,
+    },
+    {
+      label: 'Shared Calendar Permission',
+      name: 'sharedCalendarPermission',
+      type: 'autoComplete',
+      // Exchange only sends a sharing invitation for these access levels.
+      options: [
+        { label: 'Editor', value: 'Editor' },
+        { label: 'Reviewer', value: 'Reviewer' },
+        { label: 'Limited Details', value: 'LimitedDetails' },
+        { label: 'Availability Only', value: 'AvailabilityOnly' },
+      ],
+      helperText: 'Defaults to Editor.',
+      multiple: false,
       creatable: false,
     },
     {
@@ -194,6 +256,13 @@ const Page = () => {
       name: 'businessPhones[0]',
       type: 'textField',
     },
+    ...(userSettings?.userAttributes
+      ?.filter((attribute) => attribute.value !== 'sponsor')
+      .map((attribute) => ({
+        label: attribute.label,
+        name: `defaultAttributes.${attribute.label}.Value`,
+        type: 'textField',
+      })) || []),
   ]
 
   const actions = [
@@ -231,6 +300,10 @@ const Page = () => {
       'usageLocation',
       'licenses',
       'groupMemberships',
+      'sharedMailboxes',
+      'sharedMailboxPermission',
+      'sharedCalendars',
+      'sharedCalendarPermission',
       'jobTitle',
       'streetAddress',
       'city',
@@ -241,6 +314,9 @@ const Page = () => {
       'department',
       'mobilePhone',
       'businessPhones',
+      ...(userSettings?.userAttributes
+        ?.filter((attribute) => attribute.value !== 'sponsor')
+        .map((attribute) => `defaultAttributes.${attribute.label}.Value`) || []),
     ],
     actions: actions,
   }
