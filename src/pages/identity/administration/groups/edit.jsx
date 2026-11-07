@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Box, Button, Divider, Typography, Alert } from "@mui/material";
 import { Grid } from "@mui/system";
 import { useForm } from "react-hook-form";
-import { Layout as DashboardLayout } from "../../../../layouts/index.js";
+import { Layout as DashboardLayout } from "../../../../layouts/index";
 import CippFormPage from "../../../../components/CippFormPages/CippFormPage";
 import CippFormComponent from "../../../../components/CippComponents/CippFormComponent";
 import { CippFormUserSelector } from "../../../../components/CippComponents/CippFormUserSelector";
@@ -25,7 +25,7 @@ const EditGroup = () => {
   const tenantFilter = useSettings().currentTenant
 
   const groupInfo = ApiGetCall({
-    url: `/api/ListGroups?groupID=${groupId}&tenantFilter=${tenantFilter}&members=true&owners=true&groupType=${groupType}`,
+    url: `/api/ListGroups?groupID=${groupId}&tenantFilter=${tenantFilter}&members=true&owners=true&sendPermissions=true&groupType=${groupType}`,
     queryKey: `ListGroups-${groupId}`,
     waiting: groupIdReady,
   })
@@ -50,6 +50,10 @@ const EditGroup = () => {
       AddDevice: [],
       AddLicenses: [],
       RemoveLicenses: [],
+      AddSendAs: [],
+      RemoveSendAs: [],
+      AddSendOnBehalf: [],
+      RemoveSendOnBehalf: [],
       visibility: 'Public',
     },
   })
@@ -117,6 +121,10 @@ const EditGroup = () => {
           AddDevice: [],
           AddLicenses: [],
           RemoveLicenses: [],
+          AddSendAs: [],
+          RemoveSendAs: [],
+          AddSendOnBehalf: [],
+          RemoveSendOnBehalf: [],
         }
 
         // Store initial values for comparison
@@ -161,8 +169,13 @@ const EditGroup = () => {
       <CippFormPage
         formControl={formControl}
         queryKey={[`ListGroups-${groupId}`, `Licenses-${tenantFilter}`]}
-        title={`Group - ${groupInfo.data?.groupInfo?.displayName || ''}`}
+        title={
+          groupInfo.data?.groupInfo?.displayName
+            ? `Group - ${groupInfo.data.groupInfo.displayName}`
+            : 'Group'
+        }
         formPageType="Edit"
+        hideSubmit={!groupId}
         backButtonTitle="Group Overview"
         postUrl="/api/EditGroup"
         customDataformatter={customDataFormatter}
@@ -179,13 +192,19 @@ const EditGroup = () => {
           </>
         }
       >
+        {!groupId && (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            No group selected. Open this page from the Groups list to edit a group.
+          </Alert>
+        )}
         {groupInfo.isSuccess && groupInfo.data?.groupInfo?.onPremisesSyncEnabled && (
           <Alert severity="error" sx={{ mb: 1 }}>
             This group is synced from on-premises Active Directory. Changes should be made in the
             on-premises environment instead.
           </Alert>
         )}
-        {showMembershipTable ? (
+        {groupId &&
+          (showMembershipTable ? (
           <Box sx={{ my: 2 }}>
             <CippDataTable
               data={combinedData}
@@ -439,6 +458,97 @@ const EditGroup = () => {
                 />
               </Grid>
 
+              {['Distribution List', 'Mail-Enabled Security', 'Microsoft 365'].includes(groupType) && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6">Send Permissions</Typography>
+                  </Grid>
+
+                  <Grid size={{ md: 6, xs: 12 }}>
+                    <CippFormUserSelector
+                      formControl={formControl}
+                      name="AddSendAs"
+                      label="Add Send As"
+                      multiple={true}
+                      isFetching={groupInfo.isFetching}
+                      disabled={groupInfo.isFetching}
+                      addedField={{
+                        id: 'id',
+                        displayName: 'displayName',
+                        userPrincipalName: 'userPrincipalName',
+                      }}
+                      dataFilter={(option) =>
+                        !groupInfo.data?.sendAs?.some(
+                          (p) =>
+                            p.Trustee?.toLowerCase() ===
+                            option.addedFields?.userPrincipalName?.toLowerCase()
+                        )
+                      }
+                    />
+                  </Grid>
+
+                  <Grid size={{ md: 6, xs: 12 }}>
+                    <CippFormComponent
+                      type="autoComplete"
+                      name="RemoveSendAs"
+                      label="Remove Send As"
+                      formControl={formControl}
+                      multiple={true}
+                      creatable={false}
+                      isFetching={groupInfo.isFetching}
+                      disabled={groupInfo.isFetching}
+                      options={
+                        groupInfo.data?.sendAs?.map((p) => ({
+                          label: p.Trustee,
+                          value: p.Trustee,
+                        })) || []
+                      }
+                      sortOptions={true}
+                    />
+                  </Grid>
+
+                  <Grid size={{ md: 6, xs: 12 }}>
+                    <CippFormUserSelector
+                      formControl={formControl}
+                      name="AddSendOnBehalf"
+                      label="Add Send on Behalf"
+                      multiple={true}
+                      isFetching={groupInfo.isFetching}
+                      disabled={groupInfo.isFetching}
+                      addedField={{
+                        id: 'id',
+                        displayName: 'displayName',
+                        userPrincipalName: 'userPrincipalName',
+                      }}
+                      dataFilter={(option) =>
+                        !groupInfo.data?.sendOnBehalf?.some((p) => p.id === option.value)
+                      }
+                    />
+                  </Grid>
+
+                  <Grid size={{ md: 6, xs: 12 }}>
+                    <CippFormComponent
+                      type="autoComplete"
+                      name="RemoveSendOnBehalf"
+                      label="Remove Send on Behalf"
+                      formControl={formControl}
+                      multiple={true}
+                      creatable={false}
+                      isFetching={groupInfo.isFetching}
+                      disabled={groupInfo.isFetching}
+                      options={
+                        groupInfo.data?.sendOnBehalf?.map((p) => ({
+                          label: `${p.displayName} (${p.userPrincipalName ?? p.mail})`,
+                          value: p.userPrincipalName ?? p.mail ?? p.id,
+                        })) || []
+                      }
+                      sortOptions={true}
+                    />
+                  </Grid>
+                </>
+              )}
+
               <Grid size={{ xs: 12 }}>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="h6">Group Settings</Typography>
@@ -516,7 +626,12 @@ const EditGroup = () => {
                 <>
                   <Grid size={{ xs: 12 }}>
                     <Typography variant="h6">Licenses</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mb: 1
+                      }}>
                       Licenses assigned to this group are automatically applied to all members.
                       Changes can take 2-5 minutes to propagate.
                     </Typography>
@@ -569,10 +684,10 @@ const EditGroup = () => {
               )}
             </Grid>
           </Box>
-        )}
+          ))}
       </CippFormPage>
     </>
-  )
+  );
 }
 
 EditGroup.getLayout = (page) => <DashboardLayout>{page}</DashboardLayout>

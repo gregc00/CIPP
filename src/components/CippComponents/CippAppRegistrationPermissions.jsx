@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { CippIcons } from "../../utils/icon-registry";
 import {
   Accordion,
   AccordionSummary,
@@ -14,7 +15,6 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { ExpandMore, WarningAmber } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { ApiGetCall } from "../../api/ApiCall";
 import riskyPermissionsJson from "../../data/RiskyPermissions.json";
@@ -94,9 +94,9 @@ const summariseAccordionRisk = (metas) => {
   const list = metas.filter(Boolean);
   if (list.length === 0) return null;
   const worst = list.reduce((acc, m) =>
-    (RISK_ORDER[m.risk] ?? 0) > (RISK_ORDER[acc.risk] ?? 0) ? m : acc
+    (RISK_ORDER[m.suspicion] ?? 0) > (RISK_ORDER[acc.suspicion] ?? 0) ? m : acc
   );
-  return { count: list.length, worst: worst.risk };
+  return { count: list.length, worst: worst.suspicion };
 };
 
 const ResourcePermissionsAccordion = ({
@@ -161,18 +161,32 @@ const ResourcePermissionsAccordion = ({
       }}
       disableGutters
     >
-      <AccordionSummary expandIcon={<ExpandMore />}>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ width: "100%", pr: 1 }}>
+      <AccordionSummary
+        expandIcon={<CippIcons.ExpandMore />}
+        // summary is a centered ButtonBase, an unshrinkable row spills both edges
+        sx={{ "& .MuiAccordionSummary-content": { minWidth: 0 } }}
+      >
+        <Stack
+          direction="row"
+          spacing={2}
+          useFlexGap
+          sx={{
+            alignItems: "center",
+            width: "100%",
+            pr: 1,
+            flexWrap: "wrap",
+            rowGap: 1
+          }}>
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             {title}
           </Typography>
           {accordionRisk && (
             <Tooltip
-              title={`This API includes ${accordionRisk.count} permission(s) listed in the risky-permissions set (highest: ${accordionRisk.worst}).`}
+              title={`This API includes ${accordionRisk.count} permission(s) listed in the risky-permissions set (highest suspicion: ${accordionRisk.worst}).`}
             >
               <Chip
                 size="small"
-                icon={<WarningAmber sx={{ fontSize: 18 }} />}
+                icon={<CippIcons.WarningAmber sx={{ fontSize: 18 }} />}
                 label={`${accordionRisk.worst} (${accordionRisk.count})`}
                 color={riskChipColor(accordionRisk.worst)}
                 variant={accordionRisk.worst === "Low" ? "outlined" : "filled"}
@@ -180,7 +194,12 @@ const ResourcePermissionsAccordion = ({
               />
             </Tooltip>
           )}
-          <Chip size="small" label={resourceAppId} variant="outlined" sx={{ maxWidth: 280 }} />
+          <Chip
+            size="small"
+            label={resourceAppId}
+            variant="outlined"
+            sx={{ maxWidth: 280, minWidth: 0 }}
+          />
           <Chip size="small" label={`${resourceAccess.length}`} />
         </Stack>
       </AccordionSummary>
@@ -199,7 +218,7 @@ const ResourcePermissionsAccordion = ({
                 ? getPermissionDetails(access.id)
                 : { name: access.id, description: null };
               const riskMeta = lookupPermissionRisk(access.id, permissionKind, apiDisplayHint);
-              const accent = riskMeta ? riskAccentColor(riskMeta.risk, theme) : null;
+              const accent = riskMeta ? riskAccentColor(riskMeta.suspicion, theme) : null;
               return (
                 <ListItem
                   key={`${access.id}-${idx}`}
@@ -219,7 +238,7 @@ const ResourcePermissionsAccordion = ({
                         title={
                           <Box sx={{ maxWidth: 380, py: 0.25 }}>
                             <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-                              {riskMeta.risk}
+                              {`Suspicion ${riskMeta.suspicion}, impact ${riskMeta.impact}`}
                               {riskMeta.name ? ` — ${riskMeta.name}` : ""}
                             </Typography>
                             <Typography variant="body2" component="p" sx={{ m: 0 }}>
@@ -231,9 +250,9 @@ const ResourcePermissionsAccordion = ({
                         <span>
                           <Chip
                             size="small"
-                            label={riskMeta.risk}
-                            color={riskChipColor(riskMeta.risk)}
-                            variant={riskMeta.risk === "Low" ? "outlined" : "filled"}
+                            label={riskMeta.suspicion}
+                            color={riskChipColor(riskMeta.suspicion)}
+                            variant={riskMeta.suspicion === "Low" ? "outlined" : "filled"}
                             sx={{ cursor: "help", maxWidth: 120 }}
                           />
                         </span>
@@ -244,9 +263,10 @@ const ResourcePermissionsAccordion = ({
                   <ListItemText
                     primary={details.name}
                     secondary={details.description || undefined}
-                    primaryTypographyProps={{ variant: "body2", fontWeight: "medium" }}
-                    secondaryTypographyProps={{ variant: "caption" }}
-                  />
+                    slotProps={{
+                      primary: { variant: "body2", fontWeight: "medium" },
+                      secondary: { variant: "caption" }
+                    }} />
                 </ListItem>
               );
             })}
@@ -342,7 +362,12 @@ const CippAppRegistrationPermissions = ({ requiredResourceAccess }) => {
         <Typography variant="h6" sx={{ mb: 0.5 }}>
           Application permissions
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 2
+          }}>
           App-only (admin consent) permissions, grouped by resource API.
         </Typography>
         {listBusy && <Skeleton variant="rectangular" height={100} sx={{ mb: 1 }} />}
@@ -366,7 +391,12 @@ const CippAppRegistrationPermissions = ({ requiredResourceAccess }) => {
         <Typography variant="h6" sx={{ mb: 0.5 }}>
           Delegated permissions
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 2
+          }}>
           Delegated (user or admin consent) permissions, grouped by resource API.
         </Typography>
         {listBusy && <Skeleton variant="rectangular" height={100} sx={{ mb: 1 }} />}

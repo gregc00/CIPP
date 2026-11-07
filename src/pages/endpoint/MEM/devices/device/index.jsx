@@ -1,23 +1,11 @@
-import { Layout as DashboardLayout } from '../../../../../layouts/index.js'
+import { Layout as DashboardLayout } from '../../../../../layouts/index'
+import { CippIcons } from '../../../../../utils/icon-registry'
 import { useSettings } from '../../../../../hooks/use-settings'
 import { useRouter } from 'next/router'
 import { ApiGetCall, ApiPostCall } from '../../../../../api/ApiCall'
 import CippFormSkeleton from '../../../../../components/CippFormPages/CippFormSkeleton'
-import CalendarIcon from '@heroicons/react/24/outline/CalendarIcon'
-import {
-  PhoneAndroid,
-  Computer,
-  PhoneIphone,
-  Laptop,
-  Launch,
-  Security,
-  CheckCircle,
-  Warning,
-  Sync,
-  Fingerprint,
-  Group,
-} from '@mui/icons-material'
 import { HeaderedTabbedLayout } from '../../../../../layouts/HeaderedTabbedLayout'
+import { CippEntitySwitcher } from '../../../../../components/CippComponents/CippEntitySwitcher'
 import tabOptions from './tabOptions'
 import { CippCopyToClipBoard } from '../../../../../components/CippComponents/CippCopyToClipboard'
 import { getIntuneDeviceActions } from '../../../../../components/CippComponents/CippIntuneDeviceActions.jsx'
@@ -33,7 +21,7 @@ import { CippDataTable } from '../../../../../components/CippTable/CippDataTable
 import { CippHead } from '../../../../../components/CippComponents/CippHead'
 import { Button } from '@mui/material'
 import { getCippFormatting } from '../../../../../utils/get-cipp-formatting'
-import { PencilIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { CippDevicePolicySettingStates } from '../../../../../components/CippComponents/CippDevicePolicySettingStates'
 
 const Page = () => {
   const userSettingsDefaults = useSettings()
@@ -57,9 +45,21 @@ const Page = () => {
     waiting: waiting,
   })
 
+  // Intune's own device-page reports: unlike the per-device state collections they also cover
+  // settings catalog, administrative template and endpoint security policies.
+  const reportTenant = router.query.tenantFilter ?? userSettingsDefaults.currentTenant
+  // Both reports in one round trip; a report that failed comes back null with its reason in errors
+  const policyReport = ApiGetCall({
+    url: '/api/ListDevicePolicyStatus',
+    data: { tenantFilter: reportTenant, deviceId, report: 'all' },
+    queryKey: `DevicePolicyStatus-${deviceId}`,
+    waiting: waiting,
+  })
+
   const deviceBulkRequest = ApiPostCall({
     urlFromData: true,
   })
+  const bulkFetchedForId = useRef(null)
 
   // Handle response structure - ListGraphRequest may wrap single items in Results array
   // Try Results array first, then Results as object, then data directly
@@ -113,11 +113,12 @@ const Page = () => {
       })
     }
 
+    bulkFetchedForId.current = deviceId
     deviceBulkRequest.mutate({
       url: '/api/ListGraphBulkRequest',
       data: {
         Requests: requests,
-        tenantFilter: userSettingsDefaults.currentTenant,
+        tenantFilter: router.query.tenantFilter ?? userSettingsDefaults.currentTenant,
       },
     })
   }
@@ -128,7 +129,7 @@ const Page = () => {
       deviceId &&
       userSettingsDefaults.currentTenant &&
       deviceRequest.isSuccess &&
-      !deviceBulkRequest.isSuccess
+      bulkFetchedForId.current !== deviceId
     ) {
       refreshFunction()
     }
@@ -136,7 +137,6 @@ const Page = () => {
     deviceId,
     userSettingsDefaults.currentTenant,
     deviceRequest.isSuccess,
-    deviceBulkRequest.isSuccess,
   ])
 
   const bulkData = deviceBulkRequest?.data?.data ?? []
@@ -152,6 +152,18 @@ const Page = () => {
   const users = usersData?.body?.value || []
   const deviceMemberOf = deviceMemberOfData?.body?.value || []
 
+  // Graph bulk items omit `error.message` on many failures (message is under body.error),
+  // and a missing item makes `status !== 200` true — treat only real HTTP failures as errors.
+  const isBulkRequestFailed = (item) =>
+    item != null && typeof item.status === 'number' && (item.status < 200 || item.status >= 300)
+
+  const getBulkFailureMessage = (item, fallback) =>
+    item?.error?.message ||
+    item?.body?.error?.message ||
+    (typeof item?.body?.error === 'string' ? item.body.error : null) ||
+    (item?.status ? `Unable to load this data (HTTP ${item.status}).` : null) ||
+    fallback
+
   // Helper function to format bytes to GB (matching getCippFormatting pattern)
   const formatBytesToGB = (bytes) => {
     if (!bytes || bytes === 0) return 'N/A'
@@ -165,15 +177,15 @@ const Page = () => {
   const subtitle = deviceRequest.isSuccess
     ? [
         {
-          icon: <Computer />,
+          icon: <CippIcons.Computer />,
           text: <CippCopyToClipBoard type="chip" text={deviceData?.deviceName} />,
         },
         {
-          icon: <Fingerprint />,
+          icon: <CippIcons.Fingerprint />,
           text: <CippCopyToClipBoard type="chip" text={deviceData?.id} />,
         },
         {
-          icon: <CalendarIcon />,
+          icon: <CippIcons.CalendarIcon />,
           text: (
             <>
               Last Sync: <CippTimeAgo data={deviceData?.lastSyncDateTime} />
@@ -181,7 +193,7 @@ const Page = () => {
           ),
         },
         {
-          icon: <Launch style={{ color: '#667085' }} />,
+          icon: <CippIcons.Launch />,
           text: (
             <Button
               color="muted"
@@ -206,44 +218,90 @@ const Page = () => {
 
   // Get device icon based on OS
   const getDeviceIcon = () => {
-    if (!data?.operatingSystem) return <Computer />
+    if (!data?.operatingSystem) return <CippIcons.Computer />
     const os = data.operatingSystem.toLowerCase()
-    if (os.includes('android')) return <PhoneAndroid />
-    if (os.includes('ios') || os.includes('iphone') || os.includes('ipad')) return <PhoneIphone />
-    if (os.includes('windows') || os.includes('macos')) return <Laptop />
-    return <Computer />
+    if (os.includes('android')) return <CippIcons.PhoneAndroid />
+    if (os.includes('ios') || os.includes('iphone') || os.includes('ipad')) return <CippIcons.PhoneIphone />
+    if (os.includes('windows') || os.includes('macos')) return <CippIcons.Laptop />
+    return <CippIcons.Computer />
   }
 
+  const tenantFilter = router.query.tenantFilter ?? userSettingsDefaults.currentTenant
+
+  const reportRows = (key) =>
+    Array.isArray(policyReport.data?.Results?.[key]) ? policyReport.data.Results[key] : []
+  const reportFailed = (key) =>
+    policyReport.isError || Boolean(policyReport.data?.Results?.errors?.[key])
+  const reportError = (key, fallback) => policyReport.data?.Results?.errors?.[key] ?? fallback
+  // Setting-level drill-down only exists for policies the per-device state collections know about
+  const complianceStateIds = new Set(deviceCompliance.map((policy) => policy.id))
+  const configurationStateIds = new Set(deviceConfiguration.map((policy) => policy.id))
+
+  const countOf = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`
+  // Report times are UTC without a zone suffix
+  const asUtc = (value) => (value && !value.endsWith('Z') ? `${value}Z` : value)
+  const settingDetails = (row, stateIds, statesCollection) =>
+    stateIds.has(row.policyId) ? (
+      <CippDevicePolicySettingStates
+        deviceId={deviceId}
+        policyStateId={row.policyId}
+        tenantFilter={tenantFilter}
+        statesCollection={statesCollection}
+      />
+    ) : (
+      <Typography variant="body2" sx={{ color: 'text.secondary', p: 2 }}>
+        Setting-level results are not available for this policy type.
+      </Typography>
+    )
+
   // Prepare compliance policy items
+  // PolicyStatus 2 = compliant
+  const complianceRows = reportRows('compliance').map((policy) => ({
+    policyName: policy.PolicyName,
+    status: policy.PolicyStatus_loc || 'Unknown',
+    compliant: policy.PolicyStatus === 2,
+    userPrincipalName: policy.UPN,
+    lastContactDateTime: asUtc(policy.LastContact),
+    policyVersion: policy.PolicyVersion,
+    policyId: policy.PolicyId,
+  }))
+  const nonCompliantCount = complianceRows.filter((row) => !row.compliant).length
   let compliancePolicyItems = []
-  if (deviceCompliance.length > 0) {
-    compliancePolicyItems = deviceCompliance.map((policy, index) => ({
-      id: index,
-      cardLabelBox: {
-        cardLabelBoxHeader: policy.complianceState === 'compliant' ? <CheckCircle /> : <Warning />,
-      },
-      text: policy.displayName || 'Unknown Policy',
-      subtext: `State: ${policy.complianceState || 'Unknown'}`,
-      statusColor: policy.complianceState === 'compliant' ? 'success.main' : 'warning.main',
-      statusText: policy.complianceState || 'Unknown',
-      propertyItems: [
-        {
-          label: 'Setting Count',
-          value: policy.settingCount || 'N/A',
-        },
-        {
-          label: 'Setting States',
-          value: policy.settingStates?.length || 0,
-        },
-      ],
-    }))
-  } else if (deviceComplianceData?.status !== 200) {
+  if (complianceRows.length > 0) {
     compliancePolicyItems = [
       {
-        id: 1,
+        id: 'compliance',
+        cardLabelBox: {
+          cardLabelBoxHeader:
+            nonCompliantCount > 0 ? <CippIcons.Warning /> : <CippIcons.CheckCircle />,
+        },
+        text: 'Compliance Policies',
+        subtext: `${countOf(complianceRows.length, 'policy', 'policies')}, ${nonCompliantCount} not compliant`,
+        statusText: nonCompliantCount > 0 ? 'Not compliant' : 'Compliant',
+        statusColor: nonCompliantCount > 0 ? 'warning.main' : 'success.main',
+        table: {
+          title: 'Compliance Policies',
+          hideTitle: true,
+          data: complianceRows,
+          simpleColumns: ['policyName', 'status', 'userPrincipalName', 'lastContactDateTime'],
+          refreshFunction: () => policyReport.refetch(),
+          offCanvas: {
+            children: (row) =>
+              settingDetails(row, complianceStateIds, 'deviceCompliancePolicyStates'),
+          },
+        },
+      },
+    ]
+  } else if (reportFailed('compliance')) {
+    compliancePolicyItems = [
+      {
+        id: 'compliance',
         cardLabelBox: '!',
         text: 'Error loading compliance policies',
-        subtext: deviceComplianceData?.error?.message || 'Unknown error',
+        subtext: reportError(
+          'compliance',
+          'Unable to load compliance policies. Try refreshing the device.'
+        ),
         statusColor: 'error.main',
         statusText: 'Error',
         propertyItems: [],
@@ -252,7 +310,7 @@ const Page = () => {
   } else {
     compliancePolicyItems = [
       {
-        id: 1,
+        id: 'compliance',
         cardLabelBox: '-',
         text: 'No compliance policies available',
         subtext: 'This device does not have any compliance policies assigned.',
@@ -264,35 +322,63 @@ const Page = () => {
   }
 
   // Prepare configuration policy items
+  const configurationRows = reportRows('configuration').map((policy) => ({
+    policyName: policy.PolicyName,
+    status: policy.ReportStatus_loc || policy.ReportStatus || 'Unknown',
+    succeeded: policy.ReportStatus === 'Succeeded',
+    failed: ['Error', 'Conflict'].includes(policy.ReportStatus),
+    policyType: policy.UnifiedPolicyType_loc,
+    platform: policy.UnifiedPolicyPlatformType_loc,
+    lastReportedDateTime: asUtc(policy.PspdpuLastModifiedTimeUtc),
+    policyId: policy.PolicyId,
+  }))
+  const failedConfigurationCount = configurationRows.filter((row) => row.failed).length
+  const pendingConfigurationCount = configurationRows.filter(
+    (row) => !row.succeeded && !row.failed
+  ).length
   let configurationPolicyItems = []
-  if (deviceConfiguration.length > 0) {
-    configurationPolicyItems = deviceConfiguration.map((policy, index) => ({
-      id: index,
-      cardLabelBox: {
-        cardLabelBoxHeader: policy.state === 'compliant' ? <CheckCircle /> : <Warning />,
-      },
-      text: policy.displayName || 'Unknown Policy',
-      subtext: `State: ${policy.state || 'Unknown'}`,
-      statusColor: policy.state === 'compliant' ? 'success.main' : 'warning.main',
-      statusText: policy.state || 'Unknown',
-      propertyItems: [
-        {
-          label: 'Setting Count',
-          value: policy.settingCount || 'N/A',
-        },
-        {
-          label: 'Setting States',
-          value: policy.settingStates?.length || 0,
-        },
-      ],
-    }))
-  } else if (deviceConfigurationData?.status !== 200) {
+  if (configurationRows.length > 0) {
     configurationPolicyItems = [
       {
-        id: 1,
+        id: 'configuration',
+        cardLabelBox: {
+          cardLabelBoxHeader:
+            failedConfigurationCount > 0 ? <CippIcons.Warning /> : <CippIcons.CheckCircle />,
+        },
+        text: 'Configuration Policies',
+        subtext: `${countOf(configurationRows.length, 'policy', 'policies')}, ${failedConfigurationCount} with errors or conflicts${
+          pendingConfigurationCount > 0 ? `, ${pendingConfigurationCount} other` : ''
+        }`,
+        statusText: countOf(configurationRows.length, 'Policy', 'Policies'),
+        statusColor:
+          failedConfigurationCount > 0
+            ? 'error.main'
+            : pendingConfigurationCount > 0
+              ? 'warning.main'
+              : 'success.main',
+        table: {
+          title: 'Configuration Policies',
+          hideTitle: true,
+          data: configurationRows,
+          simpleColumns: ['policyName', 'status', 'policyType', 'lastReportedDateTime'],
+          refreshFunction: () => policyReport.refetch(),
+          offCanvas: {
+            children: (row) =>
+              settingDetails(row, configurationStateIds, 'deviceConfigurationStates'),
+          },
+        },
+      },
+    ]
+  } else if (reportFailed('configuration')) {
+    configurationPolicyItems = [
+      {
+        id: 'configuration',
         cardLabelBox: '!',
         text: 'Error loading configuration policies',
-        subtext: deviceConfigurationData?.error?.message || 'Unknown error',
+        subtext: reportError(
+          'configuration',
+          'Unable to load configuration policies. Try refreshing the device.'
+        ),
         statusColor: 'error.main',
         statusText: 'Error',
         propertyItems: [],
@@ -301,12 +387,104 @@ const Page = () => {
   } else {
     configurationPolicyItems = [
       {
-        id: 1,
+        id: 'configuration',
         cardLabelBox: '-',
         text: 'No configuration policies available',
         subtext: 'This device does not have any configuration policies assigned.',
         statusColor: 'warning.main',
         statusText: 'No Policies',
+        propertyItems: [],
+      },
+    ]
+  }
+
+  // Enrollment configurations that applied when the device enrolled; the report has no status
+  const enrollmentRows = reportRows('enrollment').map((policy) => ({
+    profileName: policy.ProfileName,
+    policyType: policy.PolicyType_loc || policy.PolicyType,
+  }))
+  let enrollmentPolicyItems = []
+  if (enrollmentRows.length > 0) {
+    enrollmentPolicyItems = [
+      {
+        id: 'enrollment',
+        cardLabelBox: { cardLabelBoxHeader: <CippIcons.CheckCircle /> },
+        text: 'Enrollment Configurations',
+        subtext: `${countOf(enrollmentRows.length, 'configuration', 'configurations')} applied at enrollment`,
+        statusText: countOf(enrollmentRows.length, 'Configuration', 'Configurations'),
+        statusColor: 'success.main',
+        table: {
+          title: 'Enrollment Configurations',
+          hideTitle: true,
+          data: enrollmentRows,
+          simpleColumns: ['profileName', 'policyType'],
+          refreshFunction: () => policyReport.refetch(),
+        },
+      },
+    ]
+  } else if (reportFailed('enrollment')) {
+    enrollmentPolicyItems = [
+      {
+        id: 'enrollment',
+        cardLabelBox: '!',
+        text: 'Error loading enrollment configurations',
+        subtext: reportError(
+          'enrollment',
+          'Unable to load enrollment configurations. Try refreshing the device.'
+        ),
+        statusColor: 'error.main',
+        statusText: 'Error',
+        propertyItems: [],
+      },
+    ]
+  }
+
+  // Prepare device action history, newest first. Action results can carry secrets
+  // (a reset passcode), so only the name, state and times are kept.
+  const deviceActionRows = [...(deviceData?.deviceActionResults ?? [])]
+    .sort((a, b) => new Date(b.startDateTime ?? 0) - new Date(a.startDateTime ?? 0))
+    .map((result) => ({
+      actionName: (result.actionName ?? 'Unknown action')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/^./, (c) => c.toUpperCase()),
+      actionState: result.actionState,
+      startDateTime: result.startDateTime,
+      lastUpdatedDateTime: result.lastUpdatedDateTime,
+    }))
+  const pendingActionCount = deviceActionRows.filter((r) => r.actionState === 'pending').length
+  const failedActionCount = deviceActionRows.filter((r) => r.actionState === 'failed').length
+  let actionHistoryItems = []
+  if (deviceActionRows.length > 0) {
+    actionHistoryItems = [
+      {
+        id: 1,
+        cardLabelBox: {
+          cardLabelBoxHeader: failedActionCount > 0 ? <CippIcons.Warning /> : <CippIcons.CheckCircle />,
+        },
+        text: 'Device Actions',
+        subtext: `${countOf(deviceActionRows.length, 'action', 'actions')} recorded${
+          pendingActionCount > 0 ? `, ${pendingActionCount} pending` : ''
+        }${failedActionCount > 0 ? `, ${failedActionCount} failed` : ''}`,
+        statusText: countOf(deviceActionRows.length, 'Action', 'Actions'),
+        statusColor: failedActionCount > 0 ? 'warning.main' : 'info.main',
+        table: {
+          title: 'Device Actions',
+          hideTitle: true,
+          data: deviceActionRows,
+          simpleColumns: ['actionName', 'actionState', 'startDateTime', 'lastUpdatedDateTime'],
+          refreshFunction: () => deviceRequest.refetch(),
+        },
+      },
+    ]
+  } else {
+    actionHistoryItems = [
+      {
+        id: 1,
+        cardLabelBox: '-',
+        text: 'No device actions recorded',
+        subtext: 'Actions such as sync, reboot or remediation runs appear here once queued.',
+        statusColor: 'warning.main',
+        statusText: 'No Actions',
         propertyItems: [],
       },
     ]
@@ -319,11 +497,11 @@ const Page = () => {
       {
         id: 1,
         cardLabelBox: {
-          cardLabelBoxHeader: <CheckCircle />,
+          cardLabelBoxHeader: <CippIcons.CheckCircle />,
         },
         text: 'Detected Applications',
-        subtext: `${detectedApps.length} application(s) detected`,
-        statusText: `${detectedApps.length} App(s)`,
+        subtext: `${countOf(detectedApps.length, 'application', 'applications')} detected`,
+        statusText: countOf(detectedApps.length, 'App', 'Apps'),
         statusColor: 'info.main',
         table: {
           title: 'Detected Applications',
@@ -334,13 +512,16 @@ const Page = () => {
         },
       },
     ]
-  } else if (detectedAppsData?.status !== 200) {
+  } else if (isBulkRequestFailed(detectedAppsData) || deviceBulkRequest.isError) {
     detectedAppsItems = [
       {
         id: 1,
         cardLabelBox: '!',
         text: 'Error loading detected applications',
-        subtext: detectedAppsData?.error?.message || 'Unknown error',
+        subtext: getBulkFailureMessage(
+          detectedAppsData,
+          'Unable to load detected applications. Try refreshing the device.'
+        ),
         statusColor: 'error.main',
         statusText: 'Error',
         propertyItems: [],
@@ -367,11 +548,11 @@ const Page = () => {
       {
         id: 1,
         cardLabelBox: {
-          cardLabelBoxHeader: <CheckCircle />,
+          cardLabelBoxHeader: <CippIcons.CheckCircle />,
         },
         text: 'Device Users',
-        subtext: `${users.length} user(s) associated with this device`,
-        statusText: `${users.length} User(s)`,
+        subtext: `${countOf(users.length, 'user', 'users')} associated with this device`,
+        statusText: countOf(users.length, 'User', 'Users'),
         statusColor: 'info.main',
         table: {
           title: 'Device Users',
@@ -381,21 +562,25 @@ const Page = () => {
           refreshFunction: refreshFunction,
           actions: [
             {
-              icon: <EyeIcon />,
+              icon: <CippIcons.EyeIcon />,
               label: 'View User',
               link: `/identity/administration/users/user?userId=[id]&tenantFilter=${userSettingsDefaults.currentTenant}`,
+              pinned: true,
             },
           ],
         },
       },
     ]
-  } else if (usersData?.status !== 200) {
+  } else if (isBulkRequestFailed(usersData) || deviceBulkRequest.isError) {
     usersItems = [
       {
         id: 1,
         cardLabelBox: '!',
         text: 'Error loading device users',
-        subtext: usersData?.error?.message || 'Unknown error',
+        subtext: getBulkFailureMessage(
+          usersData,
+          'Unable to load associated users. Try refreshing the device.'
+        ),
         statusColor: 'error.main',
         statusText: 'Error',
         propertyItems: [],
@@ -422,23 +607,26 @@ const Page = () => {
           {
             id: 1,
             cardLabelBox: {
-              cardLabelBoxHeader: <Group />,
+              cardLabelBoxHeader: <CippIcons.Group />,
             },
             text: 'Groups',
             subtext: 'List of groups the device is a member of',
-            statusText: ` ${
+            statusText: countOf(
               deviceMemberOf?.filter((item) => item?.['@odata.type'] === '#microsoft.graph.group')
-                .length
-            } Group(s)`,
+                .length,
+              'Group',
+              'Groups'
+            ),
             statusColor: 'info.main',
             table: {
               title: 'Group Memberships',
               hideTitle: true,
               actions: [
                 {
-                  icon: <PencilIcon />,
+                  icon: <CippIcons.Edit />,
                   label: 'Edit Group',
                   link: '/identity/administration/groups/edit?groupId=[id]&groupType=[calculatedGroupType]',
+                  pinned: true,
                 },
               ],
               data: deviceMemberOf?.filter(
@@ -449,13 +637,16 @@ const Page = () => {
             },
           },
         ]
-      : deviceMemberOfData && deviceMemberOfData.status !== 200
+      : isBulkRequestFailed(deviceMemberOfData) || deviceBulkRequest.isError
         ? [
             {
               id: 1,
               cardLabelBox: '!',
               text: 'Error loading device group memberships',
-              subtext: deviceMemberOfData?.error?.message || 'Unknown error',
+              subtext: getBulkFailureMessage(
+                deviceMemberOfData,
+                'Unable to load group memberships. Try refreshing the device.'
+              ),
               statusColor: 'error.main',
               statusText: 'Error',
               propertyItems: [],
@@ -477,6 +668,28 @@ const Page = () => {
     <HeaderedTabbedLayout
       tabOptions={tabOptions}
       title={title}
+      titleControl={
+        <CippEntitySwitcher
+          title={title}
+          currentId={deviceId}
+          queryParamKey="deviceId"
+          entityName="device"
+          api={{
+            url: '/api/ListGraphRequest',
+            data: {
+              Endpoint: 'deviceManagement/managedDevices',
+              tenantFilter: router.query.tenantFilter ?? userSettingsDefaults.currentTenant,
+              // Intune endpoints reject $orderby/$count, so ordering happens client-side.
+              $select: 'id,deviceName,userPrincipalName',
+              $top: 999,
+            },
+            queryKey: `DeviceSwitcher-${router.query.tenantFilter ?? userSettingsDefaults.currentTenant}`,
+          }}
+          getPrimary={(device) => device.deviceName}
+          getSecondary={(device) => device.userPrincipalName}
+          sortByPrimary
+        />
+      }
       actions={deviceActions}
       actionsData={data}
       subtitle={subtitle}
@@ -492,7 +705,7 @@ const Page = () => {
         >
           <CippHead title={title} />
           <Grid container spacing={2}>
-            <Grid size={4}>
+            <Grid size={{ xs: 12, lg: 4 }}>
               <Card>
                 <CardHeader
                   title="Device Details"
@@ -502,10 +715,11 @@ const Page = () => {
                         size="small"
                         onClick={() => {
                           deviceRequest.refetch()
+                          policyReport.refetch()
                           refreshFunction()
                         }}
                       >
-                        <Sync fontSize="small" />
+                        <CippIcons.Sync fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   }
@@ -515,10 +729,14 @@ const Page = () => {
                   <PropertyListItem
                     divider
                     value={
-                      <Stack alignItems="center" spacing={1}>
+                      <Stack spacing={1} sx={{
+                        alignItems: "center"
+                      }}>
                         <SvgIcon sx={{ fontSize: 64 }}>{getDeviceIcon()}</SvgIcon>
                         <Typography variant="h6">{data?.deviceName || 'N/A'}</Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>
                           {data?.manufacturer} {data?.model}
                         </Typography>
                       </Stack>
@@ -530,7 +748,9 @@ const Page = () => {
                     value={
                       <Grid container spacing={2}>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Device Name:
                           </Typography>
                           <Typography variant="inherit">
@@ -538,7 +758,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Device ID:
                           </Typography>
                           <Typography variant="inherit">
@@ -546,7 +768,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Operating System:
                           </Typography>
                           <Typography variant="inherit">
@@ -554,33 +778,55 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Manufacturer:
                           </Typography>
                           <Typography variant="inherit">{data?.manufacturer || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Model:
                           </Typography>
                           <Typography variant="inherit">{data?.model || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Serial Number:
                           </Typography>
                           <Typography variant="inherit">{data?.serialNumber || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Compliance State:
                           </Typography>
                           <Typography variant="inherit">
                             {getCippFormatting(data?.complianceState, 'complianceState') || 'N/A'}
                           </Typography>
                         </Grid>
+                        {data?.complianceGracePeriodExpirationDateTime && (
+                          <Grid size={{ xs: 12 }}>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
+                              Grace period expires:
+                            </Typography>
+                            <Typography variant="inherit">
+                              {new Date(data.complianceGracePeriodExpirationDateTime).toLocaleString()}
+                            </Typography>
+                          </Grid>
+                        )}
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Enrolled Date:
                           </Typography>
                           <Typography variant="inherit">
@@ -590,7 +836,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Last Sync:
                           </Typography>
                           <Typography variant="inherit">
@@ -600,7 +848,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Owner Type:
                           </Typography>
                           <Typography variant="inherit">
@@ -611,7 +861,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Enrollment Type:
                           </Typography>
                           <Typography variant="inherit">
@@ -623,7 +875,9 @@ const Page = () => {
                         </Grid>
                         {data?.userPrincipalName && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Primary User:
                             </Typography>
                             <Typography variant="inherit">
@@ -634,7 +888,9 @@ const Page = () => {
                         )}
                         {data?.totalStorageSpaceInBytes && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Storage:
                             </Typography>
                             <Typography variant="inherit">
@@ -656,19 +912,17 @@ const Page = () => {
                 </PropertyList>
               </Card>
             </Grid>
-            <Grid size={8}>
+            <Grid size={{ xs: 12, lg: 8 }}>
               <Stack spacing={3}>
-                <Typography variant="h6">Compliance Policies</Typography>
+                <Typography variant="h6">Policies</Typography>
                 <CippBannerListCard
-                  isFetching={deviceBulkRequest.isPending}
-                  items={compliancePolicyItems}
-                  isCollapsible={compliancePolicyItems.length > 0}
-                />
-                <Typography variant="h6">Configuration Policies</Typography>
-                <CippBannerListCard
-                  isFetching={deviceBulkRequest.isPending}
-                  items={configurationPolicyItems}
-                  isCollapsible={configurationPolicyItems.length > 0}
+                  isFetching={policyReport.isFetching}
+                  items={[
+                    ...compliancePolicyItems,
+                    ...configurationPolicyItems,
+                    ...enrollmentPolicyItems,
+                  ]}
+                  isCollapsible={true}
                 />
                 <Typography variant="h6">Detected Applications</Typography>
                 <CippBannerListCard
@@ -688,13 +942,19 @@ const Page = () => {
                   items={groupMembershipItems}
                   isCollapsible={true}
                 />
+                <Typography variant="h6">Action History</Typography>
+                <CippBannerListCard
+                  isFetching={deviceRequest.isFetching}
+                  items={actionHistoryItems}
+                  isCollapsible={true}
+                />
               </Stack>
             </Grid>
           </Grid>
         </Box>
       )}
     </HeaderedTabbedLayout>
-  )
+  );
 }
 
 Page.getLayout = (page) => <DashboardLayout>{page}</DashboardLayout>

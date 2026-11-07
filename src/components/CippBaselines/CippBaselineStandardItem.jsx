@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { CippIcons } from '../../utils/icon-registry'
 import {
   Accordion,
   AccordionDetails,
@@ -13,7 +14,6 @@ import {
   Typography,
 } from '@mui/material'
 import { Grid } from '@mui/system'
-import { AutoFixHigh, Delete, ExpandMore } from '@mui/icons-material'
 import { useWatch } from 'react-hook-form'
 import CippFormComponent from '../CippComponents/CippFormComponent'
 import CippBaselineStandardSettings from './CippBaselineStandardSettings'
@@ -45,7 +45,7 @@ export const renderExpectedValue = (template, values) => {
     return template.replace(/%(\w+)%/g, (match, token) => {
       const value = resolveToken(token, values)
       return value === undefined ? match : value
-    })
+    });
   }
   if (Array.isArray(template)) {
     return template.map((item) => renderExpectedValue(item, values))
@@ -70,6 +70,7 @@ export const CippBaselineStandardItem = ({
   expanded,
   onToggle,
   onRemove,
+  onAddInstance,
   instanceId,
   savedConfig,
 }) => {
@@ -86,9 +87,12 @@ export const CippBaselineStandardItem = ({
   const watched = useWatch({ control: formControl.control, name: fieldBase })
   // Identity-carrying standards (CA/Intune templates via instanceIdentity, manual tasks
   // via taskName) title as '<label> - <selected name>' so ten instances stay tellable.
+  // Saved-but-never-expanded instances have no form values yet (details mount lazily),
+  // so the saved configuration supplies the identity for the title.
   const identityValueRaw = standard.instanceIdentity
-    ? watched?.variables?.[standard.instanceIdentity]
-    : watched?.variables?.taskName
+    ? (watched?.variables?.[standard.instanceIdentity] ??
+      savedConfig?.variables?.[standard.instanceIdentity])
+    : (watched?.variables?.taskName ?? savedConfig?.variables?.taskName)
   const identityLabel =
     identityValueRaw && typeof identityValueRaw === 'object'
       ? (identityValueRaw.label ?? identityValueRaw.value)
@@ -97,18 +101,27 @@ export const CippBaselineStandardItem = ({
   // The license catalog loads as an async chunk; this re-renders once it lands so
   // the required-license chip shows friendly names instead of service plan codes.
   useM365Licenses()
-  const requiredLicenseNames = [
-    ...new Set(
-      (standard.requiredCapabilities ?? []).map(getServicePlanFriendlyName)
-    ),
-  ]
+  // Nested requiredCapabilities are AND-ed groups of any-of plans.
+  const requiredCapabilities = standard.requiredCapabilities ?? []
+  const requiredLicenseGroups = (
+    requiredCapabilities.some(Array.isArray)
+      ? requiredCapabilities
+      : [requiredCapabilities]
+  )
+    .map((group) =>
+      [...new Set(group.map(getServicePlanFriendlyName))].join(' or ')
+    )
+    .filter(Boolean)
 
   // Seed the action posture: saved configuration (editing an existing baseline) wins,
-  // then the defaults for a freshly added standard. The settings fields seed themselves
-  // (saved value > recommended) inside CippBaselineStandardSettings.
+  // then the defaults for a freshly added standard - report only, never auto-remediate,
+  // until the operator explicitly enables it. The settings fields seed themselves
+  // (saved value > recommended) inside CippBaselineStandardSettings. savedConfig is a
+  // dependency so a form reset (reloading a template into a mounted editor) re-seeds
+  // the wiped fields; the undefined guard keeps live edits untouched.
   useEffect(() => {
     const postureDefaults = {
-      remediateEnabled: true,
+      remediateEnabled: false,
       alertEnabled: true,
       alertOnRemediate: false,
     }
@@ -121,9 +134,9 @@ export const CippBaselineStandardItem = ({
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fieldBase])
+  }, [fieldBase, savedConfig])
 
-  const remediateEnabled = watched?.remediateEnabled ?? true
+  const remediateEnabled = watched?.remediateEnabled ?? false
   const alertEnabled = watched?.alertEnabled ?? true
   const alertOnRemediate = watched?.alertOnRemediate ?? false
   const renderedExpected = renderExpectedValue(
@@ -155,15 +168,21 @@ export const CippBaselineStandardItem = ({
       onChange={onToggle}
       disableGutters
       sx={{ '&:before': { display: 'none' }, borderRadius: '12px' }}
+      slotProps={{
+        transition: { unmountOnExit: true }
+      }}
     >
-      <AccordionSummary expandIcon={<ExpandMore />}>
+      <AccordionSummary expandIcon={<CippIcons.ExpandMore />}>
         <Stack
           direction="row"
           spacing={2}
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ width: '100%', pr: 1, minWidth: 0 }}
-        >
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: '100%',
+            pr: 1,
+            minWidth: 0
+          }}>
           <Box sx={{ minWidth: 0, flexGrow: 1, flexBasis: '30%' }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
               {identityLabel
@@ -171,19 +190,22 @@ export const CippBaselineStandardItem = ({
                 : standard.label}
               {instanceNumber ? ` (instance ${instanceNumber})` : ''}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               {standard.cat}
             </Typography>
           </Box>
           <Stack
             direction="row"
             spacing={1}
-            alignItems="center"
-            flexWrap="wrap"
             useFlexGap
-            justifyContent="flex-end"
-            sx={{ minWidth: 0 }}
-          >
+            sx={{
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              minWidth: 0
+            }}>
             <Tooltip
               title={
                 remediateEnabled
@@ -237,6 +259,20 @@ export const CippBaselineStandardItem = ({
                 />
               </Tooltip>
             )}
+            {standard.multiple === true && onAddInstance && (
+              <Tooltip title={`Add another ${standard.label} to this stage`}>
+                <IconButton
+                  size="small"
+                  aria-label={`Add another ${standard.label}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onAddInstance(standard.name)
+                  }}
+                >
+                  <CippIcons.Add fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Remove from this stage">
               <IconButton
                 size="small"
@@ -245,7 +281,7 @@ export const CippBaselineStandardItem = ({
                   onRemove(fieldBase)
                 }}
               >
-                <Delete fontSize="small" />
+                <CippIcons.Delete fontSize="small" />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -253,10 +289,14 @@ export const CippBaselineStandardItem = ({
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             {standard.helpText}
           </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Stack direction="row" spacing={1} useFlexGap sx={{
+            flexWrap: "wrap"
+          }}>
             {(standard.recommendedBy ?? []).map((source) => (
               <Chip
                 key={source}
@@ -269,15 +309,15 @@ export const CippBaselineStandardItem = ({
             {(standard.tag ?? []).map((tag) => (
               <Chip key={tag} variant="outlined" size="small" label={tag} />
             ))}
-            {requiredLicenseNames.length > 0 && (
+            {requiredLicenseGroups.length > 0 && (
               <Tooltip
-                title={`Tenants without one of these licenses are excluded from scoring for this standard (${(standard.requiredCapabilities ?? []).join(', ')})`}
+                title={`Tenants without these licenses are excluded from scoring for this standard (${requiredCapabilities.flat().join(', ')})`}
               >
                 <Chip
                   variant="outlined"
                   size="small"
                   color="warning"
-                  label={`Requires: ${requiredLicenseNames.join(' or ')}`}
+                  label={`Requires: ${requiredLicenseGroups.join(' and ')}`}
                 />
               </Tooltip>
             )}
@@ -289,9 +329,10 @@ export const CippBaselineStandardItem = ({
               <Stack
                 direction="row"
                 spacing={2}
-                alignItems="center"
-                justifyContent="space-between"
-              >
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "space-between"
+                }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                   Settings
                 </Typography>
@@ -299,7 +340,7 @@ export const CippBaselineStandardItem = ({
                   <Button
                     size="small"
                     variant="outlined"
-                    startIcon={<AutoFixHigh />}
+                    startIcon={<CippIcons.AutoFixHigh />}
                     onClick={applyRecommended}
                   >
                     Use recommended values
@@ -314,7 +355,9 @@ export const CippBaselineStandardItem = ({
               />
             </>
           ) : (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               This standard has no configurable settings - it enforces a fixed
               value.
             </Typography>
@@ -354,14 +397,18 @@ export const CippBaselineStandardItem = ({
             // Template-backed standards (CA/Intune): the real expected value is the FULL
             // selected template (or every template in the package), resolved by the
             // engine at run time - a rendered preview here would mislead.
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               {standard.package
                 ? 'This deploys and drift-checks every template tagged with the selected package. Membership is resolved fresh on every run: tagging a template with this package adds it to the baseline automatically, untagging removes it. All templates in the package share the options configured above.'
                 : 'The expected configuration is the full selected template - use the preview button on the template picker to inspect it. The engine compares every setting in it against the tenant on each run.'}
             </Typography>
           ) : (
             <>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={1} sx={{
+                alignItems: "center"
+              }}>
                 <Typography
                   variant="caption"
                   sx={{
@@ -406,7 +453,7 @@ export const CippBaselineStandardItem = ({
         </Stack>
       </AccordionDetails>
     </Accordion>
-  )
+  );
 }
 
 export default CippBaselineStandardItem
